@@ -346,6 +346,85 @@ def calculate_indicators(df: pd.DataFrame) -> dict:
     }
 
 
+def fetch_coingecko_ohlc(coingecko_id: str, interval: str = "1h") -> Optional[pd.DataFrame]:
+    """Fetch real OHLC historical data from CoinGecko for a single coin.
+    
+    Uses /coins/{id}/ohlc endpoint with retry and backoff for rate limits.
+    Returns DataFrame with columns: timestamp, open, high, low, close, volume
+    or None if rate limited / failed.
+    """
+    interval_days = {"1h": 3, "4h": 7, "1d": 14}
+    days = interval_days.get(interval, 3)
+    for attempt in range(3):
+        try:
+            resp = requests.get(
+                f"{COINGECKO_BASE}/coins/{coingecko_id}/ohlc",
+                params={"vs_currency": "usd", "days": days},
+                timeout=15,
+            )
+            if resp.status_code == 429:
+                wait = 2 ** attempt * 5
+                logger.warning(f"CoinGecko rate limited on OHLC for {coingecko_id}, waiting {wait}s...")
+                time.sleep(wait)
+                continue
+            if resp.status_code != 200:
+                logger.debug(f"CoinGecko OHLC HTTP {resp.status_code} for {coingecko_id}")
+                return None
+            ohlc_data = resp.json()
+            if not ohlc_data or len(ohlc_data) < 20:
+                logger.debug(f"CoinGecko OHLC too few points for {coingecko_id}: {len(ohlc_data) if ohlc_data else 0}")
+                return None
+            rows = []
+            for entry in ohlc_data:
+                ts, o, h, l, c = entry[:5]
+                rows.append({"timestamp": pd.to_datetime(ts, unit="ms"), "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": 0})
+            df = pd.DataFrame(rows)
+            logger.info(f"Fetched {len(df)} real OHLC candles for {coingecko_id}")
+            return df
+        except Exception as e:
+            logger.debug(f"CoinGecko OHLC error for {coingecko_id}: {e}")
+            if attempt < 2:
+                time.sleep(2 ** attempt * 3)
+    return None
+
+
+def enhance_with_real_ohlc(analysis: dict, coin_symbol: str, coingecko_id: str) -> dict:
+    """Replace proxy indicator values with real OHLC-calculated ones if available.
+    
+    Takes the simplified analysis dict and upgrades it with real technical indicators
+    from CoinGecko OHLC data. Returns original analysis if OHLC unavailable.
+    """
+    df = fetch_coingecko_ohlc(coingecko_id, DEFAULT_TIMEFRAME)
+    if df is None or df.empty:
+        return analysis
+    
+    real = calculate_indicators(df)
+    if real["signal_type"] == "neutral":
+        return analysis
+    
+    # Merge real values into analysis, keeping original signal_type if confident
+    merged = {**analysis}
+    merged.update({
+        "rsi": real["rsi"],
+        "macd_bullish": real["macd_bullish"],
+        "sma_bullish": real["sma_bullish"],
+        "volume_spike": real["volume_spike"],
+        "atr": real["atr"],
+        "volatility": real["volatility"],
+        "indicators_used": [i for i in real["indicators_used"] if i not in ["Support/Resistance"]],
+        "current_price": real["current_price"],
+        "recent_high": real["recent_high"],
+        "recent_low": real["recent_low"],
+    })
+    # Use real OHLC signal if available and matches our direction
+    if real["signal_type"] == analysis["signal_type"]:
+        merged["confidence"] = max(analysis["confidence"], real["confidence"])
+        merged["indicators_used"] = real["indicators_used"]
+    
+    logger.info(f"Enhanced {coin_symbol} with real OHLC: RSI={real['rsi']} MACD={real['macd_bullish']} SMA={real['sma_bullish']}")
+    return merged
+
+
 def calculate_dual_tps(current_price: float, atr: float, signal_type: str) -> dict:
     """
     Calculate dual TP/SL levels:
@@ -756,6 +835,13 @@ def main():
                 analysis["confidence"] = max(5, analysis["confidence"] - 10)
             elif fund_score > 0 and analysis["signal_type"] == "sell":
                 analysis["confidence"] = max(5, analysis["confidence"] - 10)
+
+            # Enhance with real OHLC data for signal coins only
+            if binance_blocked:
+                cg_id = coin_data.get("coingecko_id", "")
+                if cg_id:
+                    enhanced = enhance_with_real_ohlc(analysis, coin_symbol, cg_id)
+                    analysis = enhanced
 
             # Calculate dual TP/SL levels
             tps = calculate_dual_tps(analysis["current_price"], analysis["atr"], analysis["signal_type"])
