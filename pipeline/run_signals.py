@@ -400,6 +400,7 @@ def enhance_with_real_ohlc(analysis: dict, coin_symbol: str, coingecko_id: str) 
     
     real = calculate_indicators(df)
     if real["signal_type"] == "neutral":
+        logger.info(f"OHLC for {coin_symbol}: RSI={real['rsi']} MACD={real['macd_bullish']} SMA={real['sma_bullish']} (neutral, keeping proxy signal)")
         return analysis
     
     # Merge real values into analysis, keeping original signal_type if confident
@@ -411,17 +412,15 @@ def enhance_with_real_ohlc(analysis: dict, coin_symbol: str, coingecko_id: str) 
         "volume_spike": real["volume_spike"],
         "atr": real["atr"],
         "volatility": real["volatility"],
-        "indicators_used": [i for i in real["indicators_used"] if i not in ["Support/Resistance"]],
         "current_price": real["current_price"],
         "recent_high": real["recent_high"],
         "recent_low": real["recent_low"],
     })
-    # Use real OHLC signal if available and matches our direction
     if real["signal_type"] == analysis["signal_type"]:
         merged["confidence"] = max(analysis["confidence"], real["confidence"])
         merged["indicators_used"] = real["indicators_used"]
     
-    logger.info(f"Enhanced {coin_symbol} with real OHLC: RSI={real['rsi']} MACD={real['macd_bullish']} SMA={real['sma_bullish']}")
+    logger.info(f"Enhanced {coin_symbol} with real OHLC: RSI={real['rsi']} MACD={real['macd_bullish']} SMA={real['sma_bullish']} signal={real['signal_type']}")
     return merged
 
 
