@@ -96,12 +96,17 @@ def _safe_request(url: str, params: Optional[dict] = None, timeout: int = 10) ->
 # 1. NEWS SENTIMENT (RSS)
 # ============================================================
 
-def _analyze_news_sentiment(symbol: str) -> tuple[int, list[str]]:
+def _analyze_news_sentiment(symbol: str, coin_name: str = "") -> tuple[int, list[str]]:
     """
     Scan crypto RSS feeds for mentions of the coin.
     Returns (score_delta, tags). Score range: -3 to +3.
     """
     token = symbol.replace("USDT", "").replace("USDC", "").lower()
+    alternative_names = [token]
+    if coin_name:
+        alt = coin_name.lower().replace(" ", "-").replace("coin", "").strip()
+        if alt and alt != token:
+            alternative_names.append(alt)
     score = 0
     tags = []
     rss_text = ""
@@ -110,19 +115,20 @@ def _analyze_news_sentiment(symbol: str) -> tuple[int, list[str]]:
         try:
             resp = _safe_request(feed_url, timeout=8)
             if resp is None:
+                logger.info(f"RSS feed {feed_url.split('/')[2]} returned no response")
                 continue
-            # Simple XML parsing (no feedparser dependency needed)
             import xml.etree.ElementTree as ET
             root = ET.fromstring(resp.text)
-            # RSS 2.0: channel/item/title
             for item in root.findall(".//item")[:10]:
                 title = item.findtext("title", "")
                 description = item.findtext("description", "")
                 combined = (title + " " + description).lower()
-                if token in combined:
-                    rss_text += combined + " "
+                for name in alternative_names:
+                    if name in combined and len(name) >= 2:
+                        rss_text += combined + " "
+                        break
         except Exception as e:
-            logger.debug(f"RSS parse error for {feed_url}: {e}")
+            logger.info(f"RSS parse error for {feed_url}: {e}")
 
     if not rss_text:
         return 0, []
@@ -293,7 +299,7 @@ def _check_volume_anomaly(symbol: str) -> tuple[int, list[str]]:
 # COMBINED FUNDAMENTAL ANALYSIS
 # ============================================================
 
-def analyze_fundamental(symbol: str) -> dict:
+def analyze_fundamental(symbol: str, coin_name: str = "") -> dict:
     """
     Run all 4 fundamental sources and combine into a single score.
 
@@ -309,10 +315,12 @@ def analyze_fundamental(symbol: str) -> dict:
             }
         }
     """
-    news_score, news_tags = _analyze_news_sentiment(symbol)
+    news_score, news_tags = _analyze_news_sentiment(symbol, coin_name)
     whale_score, whale_tags = _detect_whale_activity(symbol)
     funding_score, funding_tags = _check_funding_rate(symbol)
     volume_score, volume_tags = _check_volume_anomaly(symbol)
+
+    logger.info(f"Fundamental {symbol}: news={news_score} whale={whale_score} funding={funding_score} volume={volume_score} tags={news_tags + whale_tags + funding_tags + volume_tags}")
 
     # Combine: raw sum, then clamp to -2..+2
     raw = news_score + whale_score + funding_score + volume_score

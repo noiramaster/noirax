@@ -741,7 +741,8 @@ def main():
                     continue
 
             # Fundamental analysis (all 4 sources)
-            fund_result = analyze_fundamental(coin_symbol)
+            coin_name = coin_data.get("name", "") if binance_blocked else ""
+            fund_result = analyze_fundamental(coin_symbol, coin_name)
 
             # Adjust confidence based on fundamental alignment
             fund_score = fund_result["score"]
@@ -856,6 +857,13 @@ def main():
             "timeframe": DEFAULT_TIMEFRAME,
             "resolved_result": "pending",
             "slug": slug,
+            # Both conservative and optimized levels stored for frontend differentiation
+            "stop_loss_conservative": tps["stop_loss_conservative"],
+            "take_profit_1_conservative": tps["take_profit_1_conservative"],
+            "stop_loss_optimized": tps["stop_loss_optimized"],
+            "take_profit_1_optimized": tps["take_profit_1_optimized"],
+            "take_profit_2_optimized": tps["take_profit_2_optimized"],
+            "take_profit_3_optimized": tps["take_profit_3_optimized"],
         }
 
         if supabase_client:
