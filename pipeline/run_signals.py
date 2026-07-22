@@ -575,10 +575,10 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
         indicators_used.append("MACD(proxy)")
         indicators_used.append("Volume")
 
-    if change_7d > 2 and change_24h > 0:
+    if change_7d > 5 and change_24h > 0:
         signals_list.append("macd_bullish")
         confidence += CONFIDENCE_MACD
-    elif change_7d < -2 and change_24h < 0:
+    elif change_7d < -5 and change_24h < 0:
         signals_list.append("macd_bearish")
         confidence -= CONFIDENCE_MACD
 
