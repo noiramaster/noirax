@@ -544,11 +544,7 @@ def insert_signal(supabase_client, signal_data: dict) -> bool:
 
 
 def calculate_simple_signal(coin: dict) -> Optional[dict]:
-    """Generate signal from CoinGecko market data (used when Binance is blocked).
-    
-    Uses 24h and 7d price change as RSI proxy, volume vs market_cap as volume proxy.
-    Returns same structure as calculate_indicators() or None if neutral.
-    """
+    """Generate signal from CoinGecko market data (used when Binance is blocked)."""
     price = coin.get("current_price", 0)
     change_24h = coin.get("price_change_percentage_24h", 0) or 0
     change_7d = coin.get("price_change_percentage_7d_in_currency") or change_24h or 0
@@ -557,18 +553,14 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
     vol_to_mcap = volume / mcap
     symbol = coin.get("symbol", "?")
 
-    logger.info(f"Simple {symbol}: 24h={change_24h:.1f}% 7d={change_7d:.1f}% proxy_rsi={rsi_proxy:.0f}")
-
-    # RSI proxy: 24h change mapped to 0-100 scale (sensitive for simplified market data)
     rsi_proxy = 50 + change_24h * 5
     rsi_proxy = max(0, min(100, rsi_proxy))
+    logger.info(f"Simple {symbol}: 24h={change_24h:.1f}% 7d={change_7d:.1f}% rsi_proxy={rsi_proxy:.0f}")
 
     signal_type = "neutral"
     confidence = 0
     signals_list = []
     indicators_used = ["RSI(proxy)"]
-
-    # Simplified analysis uses wider thresholds
     proxy_oversold = 35
     proxy_overbought = 65
 
@@ -583,7 +575,6 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
         indicators_used.append("MACD(proxy)")
         indicators_used.append("Volume")
 
-    # 7d trend as MACD proxy
     if change_7d > 2 and change_24h > 0:
         signals_list.append("macd_bullish")
         confidence += CONFIDENCE_MACD
@@ -591,12 +582,10 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
         signals_list.append("macd_bearish")
         confidence -= CONFIDENCE_MACD
 
-    # Volume proxy
     if vol_to_mcap > 0.1:
         signals_list.append("volume_spike")
         confidence += CONFIDENCE_VOLUME
 
-    # Near support/resistance proxy using 7d range
     if change_7d < -10:
         signals_list.append("near_support")
         confidence += CONFIDENCE_SUPPORT
@@ -615,14 +604,13 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
     if signal_type == "neutral":
         return None
 
-    # Approximate ATR from 24h price range
     atr = abs(price * change_24h / 100) if change_24h != 0 else price * 0.01
 
     return {
         "signal_type": signal_type,
         "confidence": min(abs(confidence), 95),
         "rsi": round(rsi_proxy, 1),
-        "macd_bullish": change_7d > 5 and change_24h > 0,
+        "macd_bullish": change_7d > 2 and change_24h > 0,
         "sma_bullish": change_7d > 0,
         "volume_spike": vol_to_mcap > 0.1,
         "current_price": price,
@@ -632,10 +620,10 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
         "volatility": abs(change_24h) / 100,
         "indicators_used": indicators_used,
     }
+
+
+def create_slug(coin: str, signal_type: str, timestamp: str) -> str:
     """Create SEO-friendly URL slug for a signal."""
-    coin_clean = coin.replace("/", "-").lower()
-    ts_formatted = datetime.fromisoformat(timestamp).strftime("%Y-%m-%d-%H%M") if timestamp else datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M")
-    return f"{coin_clean}-{signal_type}-{ts_formatted}"
 
 
 def verify_past_signals(supabase_client) -> int:
