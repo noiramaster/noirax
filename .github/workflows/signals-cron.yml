@@ -78,6 +78,6 @@ jobs:
         run: |
           git config user.name "noirax-bot"
           git config user.email "bot@noirax.ai"
-          cd pipeline && git add status.json
+          git add -f pipeline/status.json
           git diff --quiet && git diff --staged --quiet || git commit -m "chore: pipeline heartbeat [skip ci]"
           git push origin master || echo "No changes to push"
