@@ -208,6 +208,55 @@ def _detect_whale_activity(symbol: str) -> tuple[int, list[str]]:
 # ============================================================
 
 def _check_funding_rate(symbol: str) -> tuple[int, list[str]]:
+    """Check funding rate from Bybit/OKX public API (works from GitHub Actions, no geo-block)."""
+    token = symbol.replace("USDT", "").upper()
+    try:
+        resp = _safe_request(
+            f"https://api.bybit.com/v5/market/tickers",
+            params={"category": "linear", "symbol": f"{token}USDT"},
+            timeout=8,
+        )
+        if resp is not None:
+            data = resp.json()
+            if data.get("retCode") == 0:
+                ticker = data.get("result", {}).get("list", [{}])[0]
+                fr = float(ticker.get("fundingRate", 0))
+                score = 0
+                tags = []
+                if fr > FUNDING_RATE_HIGH:
+                    score = -1
+                    tags.append("FUNDING_RATE_HIGH")
+                elif fr < FUNDING_RATE_LOW:
+                    score = 1
+                    tags.append("FUNDING_RATE_LOW")
+                elif fr > FUNDING_RATE_ELEVATED:
+                    tags.append("FUNDING_RATE_ELEVATED")
+                return score, tags
+        logger.info(f"Bybit funding rate unavailable for {symbol}, trying OKX...")
+        resp2 = _safe_request(
+            f"https://www.okx.com/api/v5/public/funding-rate",
+            params={"instId": f"{token}-USDT-SWAP"},
+            timeout=8,
+        )
+        if resp2 is not None:
+            data2 = resp2.json()
+            if data2.get("code") == "0":
+                fr = float(data2.get("data", [{}])[0].get("fundingRate", 0))
+                score = 0
+                tags = []
+                if fr > FUNDING_RATE_HIGH:
+                    score = -1
+                    tags.append("FUNDING_RATE_HIGH")
+                elif fr < FUNDING_RATE_LOW:
+                    score = 1
+                    tags.append("FUNDING_RATE_LOW")
+                elif fr > FUNDING_RATE_ELEVATED:
+                    tags.append("FUNDING_RATE_ELEVATED")
+                return score, tags
+    except Exception as e:
+        logger.debug(f"Alternative funding rate error for {symbol}: {e}")
+    logger.info(f"Funding rate unavailable for {symbol} (all sources blocked)")
+    return 0, []
     """
     Check current funding rate from Binance Futures.
     High positive = longs paying shorts (overleveraged longs → bearish signal)
@@ -255,10 +304,7 @@ def _check_funding_rate(symbol: str) -> tuple[int, list[str]]:
 # ============================================================
 
 def _check_volume_anomaly(symbol: str) -> tuple[int, list[str]]:
-    """
-    Detect unusual volume spikes using Binance 24hr ticker.
-    Volume > 3x average suggests significant market interest.
-    """
+    """Detect unusual volume using Binance 24hr ticker (may be geo-blocked from GitHub Actions)."""
     try:
         resp = _safe_request(
             "https://api.binance.com/api/v3/ticker/24hr",
@@ -276,8 +322,6 @@ def _check_volume_anomaly(symbol: str) -> tuple[int, list[str]]:
         tags = []
         score = 0
 
-        # High volume + positive price = accumulation
-        # High volume + negative price = distribution
         if quote_volume > VOLUME_QUOTE_THRESHOLD:
             if price_change_pct > VOLUME_PRICE_CHANGE_PCT:
                 score = 1
@@ -295,30 +339,51 @@ def _check_volume_anomaly(symbol: str) -> tuple[int, list[str]]:
         return 0, []
 
 
+def _check_volume_anomaly_coingecko(volume_24h: float, market_cap: float, price_change_pct: float) -> tuple[int, list[str]]:
+    """Detect volume anomaly from CoinGecko market data (works everywhere, no per-coin API calls)."""
+    if market_cap <= 0 or volume_24h <= 0:
+        return 0, []
+    vol_to_mcap = volume_24h / market_cap
+    tags = []
+    score = 0
+    if vol_to_mcap > 0.1:
+        if price_change_pct > VOLUME_PRICE_CHANGE_PCT:
+            score = 1
+            tags.append("VOLUME_ANOMALY")
+        elif price_change_pct < -VOLUME_PRICE_CHANGE_PCT:
+            score = -1
+            tags.append("VOLUME_ANOMALY")
+        elif abs(price_change_pct) > VOLUME_ELEVATED_CHANGE_PCT:
+            tags.append("VOLUME_ELEVATED")
+    return score, tags
+
+
 # ============================================================
 # COMBINED FUNDAMENTAL ANALYSIS
 # ============================================================
 
-def analyze_fundamental(symbol: str, coin_name: str = "") -> dict:
+def analyze_fundamental(symbol: str, coin_name: str = "", coin_data: Optional[dict] = None) -> dict:
     """
     Run all 4 fundamental sources and combine into a single score.
-
-    Returns:
-        {
-            "score": int,        # -2 to +2 (clamped)
-            "tags": list[str],   # e.g. ["NEWS_POSITIVE", "VOLUME_ANOMALY"]
-            "details": {
-                "news_score": int,
-                "whale_score": int,
-                "funding_score": int,
-                "volume_score": int,
-            }
-        }
+    
+    Args:
+        symbol: Trading pair symbol (e.g. "BTCUSDT")
+        coin_name: Human-readable coin name for RSS search
+        coin_data: CoinGecko market data dict (optional, used for volume anomaly when Binance blocked)
     """
     news_score, news_tags = _analyze_news_sentiment(symbol, coin_name)
     whale_score, whale_tags = _detect_whale_activity(symbol)
     funding_score, funding_tags = _check_funding_rate(symbol)
+    
+    # Volume anomaly: try Binance first, fall back to CoinGecko data
     volume_score, volume_tags = _check_volume_anomaly(symbol)
+    if volume_score == 0 and not volume_tags and coin_data:
+        cg_volume = coin_data.get("volume_24h", 0) or 0
+        cg_mcap = coin_data.get("market_cap", 0) or 0
+        cg_change = coin_data.get("price_change_percentage_24h", 0) or 0
+        volume_score, volume_tags = _check_volume_anomaly_coingecko(cg_volume, cg_mcap, cg_change)
+
+    logger.info(f"Fundamental {symbol}: news={news_score} whale={whale_score} funding={funding_score} volume={volume_score} tags={news_tags + whale_tags + funding_tags + volume_tags}")
 
     logger.info(f"Fundamental {symbol}: news={news_score} whale={whale_score} funding={funding_score} volume={volume_score} tags={news_tags + whale_tags + funding_tags + volume_tags}")
 

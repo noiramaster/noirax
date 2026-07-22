@@ -741,8 +741,10 @@ def main():
                     continue
 
             # Fundamental analysis (all 4 sources)
-            coin_name = coin_data.get("name", "") if binance_blocked else ""
-            fund_result = analyze_fundamental(coin_symbol, coin_name)
+            if binance_blocked:
+                fund_result = analyze_fundamental(coin_symbol, coin_data.get("name", ""), coin_data)
+            else:
+                fund_result = analyze_fundamental(coin_symbol)
 
             # Adjust confidence based on fundamental alignment
             fund_score = fund_result["score"]
