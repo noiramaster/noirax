@@ -623,7 +623,6 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
 
 
 def create_slug(coin: str, signal_type: str, timestamp: str) -> str:
-def create_slug(coin: str, signal_type: str, timestamp: str) -> str:
     """Create SEO-friendly URL slug for a signal."""
     coin_clean = coin.replace("/", "-").lower()
     ts_formatted = datetime.fromisoformat(timestamp).strftime("%Y-%m-%d-%H%M") if timestamp else datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M")
