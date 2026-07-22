@@ -186,23 +186,34 @@ def get_klines(symbol: str, interval: str = "1h", limit: int = 200, coingecko_id
     # Fallback: try CoinGecko OHLC (frees data source that works from GitHub Actions)
     if coingecko_id:
         try:
-            interval_map = {"1h": 3, "4h": 7, "1d": 14}  # CoinGecko day ranges for enough candles
-            days = interval_map.get(interval, 1)
+            interval_map = {"1h": 3, "4h": 7, "1d": 14}
+            days = interval_map.get(interval, 3)
             resp = requests.get(
                 f"{COINGECKO_BASE}/coins/{coingecko_id}/ohlc",
                 params={"vs_currency": "usd", "days": days},
                 timeout=15,
             )
+            logger.debug(f"CoinGecko OHLC for {symbol} ({coingecko_id}): HTTP {resp.status_code}")
+            if resp.status_code == 429:
+                logger.warning(f"CoinGecko rate limited on {symbol}, waiting 3s...")
+                time.sleep(3)
+                resp = requests.get(
+                    f"{COINGECKO_BASE}/coins/{coingecko_id}/ohlc",
+                    params={"vs_currency": "usd", "days": days},
+                    timeout=15,
+                )
             if resp.status_code == 200:
                 ohlc_data = resp.json()
-                if ohlc_data and len(ohlc_data) >= 20:
+                if ohlc_data and len(ohlc_data) >= 10:
                     rows = []
                     for entry in ohlc_data:
-                        ts, o, h, l, c = entry[:5]
-                        rows.append({"timestamp": pd.to_datetime(ts, unit="ms"), "open": o, "high": h, "low": l, "close": c, "volume": 0})
+                        ts, o, h, l, c, *_ = entry if len(entry) >= 5 else (entry[0], 0, 0, 0, 0)
+                        rows.append({"timestamp": pd.to_datetime(ts, unit="ms"), "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": 0})
                     df = pd.DataFrame(rows)
                     logger.info(f"Got {len(df)} CoinGecko OHLC candles for {symbol}")
                     return df
+                else:
+                    logger.debug(f"CoinGecko OHLC too few candles: {len(ohlc_data) if ohlc_data else 0}")
         except Exception as e:
             logger.debug(f"CoinGecko OHLC fallback failed for {symbol}: {e}")
 
@@ -625,7 +636,7 @@ def main():
                 continue
             
             # Small delay between coins to avoid CoinGecko rate limiting
-            time.sleep(0.5)
+            time.sleep(2.0)
 
             analysis = calculate_indicators(df)
             if analysis["signal_type"] == "neutral":
