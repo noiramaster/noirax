@@ -551,13 +551,16 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
     """
     price = coin.get("current_price", 0)
     change_24h = coin.get("price_change_percentage_24h", 0) or 0
-    change_7d = coin.get("price_change_percentage_7d_in_currency", 0) or 0
+    change_7d = coin.get("price_change_percentage_7d_in_currency") or change_24h or 0
     volume = coin.get("total_volume", 0) or 0
     mcap = coin.get("market_cap", 1) or 1
     vol_to_mcap = volume / mcap
+    symbol = coin.get("symbol", "?")
 
-    # RSI proxy: 24h change mapped to 0-100 scale (wider sensitivity for simplified analysis)
-    rsi_proxy = 50 + change_24h * 4
+    logger.debug(f"Simple analysis {symbol}: 24h={change_24h:.1f}% 7d={change_7d:.1f}% vol/mcap={vol_to_mcap:.4f}")
+
+    # RSI proxy: 24h change mapped to 0-100 scale (sensitive for simplified market data)
+    rsi_proxy = 50 + change_24h * 5
     rsi_proxy = max(0, min(100, rsi_proxy))
 
     signal_type = "neutral"
@@ -565,9 +568,9 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
     signals_list = []
     indicators_used = ["RSI(proxy)"]
 
-    # Simplified analysis uses wider thresholds (proxy is lower fidelity than full OHLC RSI)
-    proxy_oversold = max(10, RSI_OVERSOLD - 10)
-    proxy_overbought = min(90, RSI_OVERBOUGHT + 10)
+    # Simplified analysis uses wider thresholds
+    proxy_oversold = 35
+    proxy_overbought = 65
 
     if rsi_proxy < proxy_oversold:
         signals_list.append("oversold")
@@ -581,10 +584,10 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
         indicators_used.append("Volume")
 
     # 7d trend as MACD proxy
-    if change_7d > 5 and change_24h > 0:
+    if change_7d > 2 and change_24h > 0:
         signals_list.append("macd_bullish")
         confidence += CONFIDENCE_MACD
-    elif change_7d < -5 and change_24h < 0:
+    elif change_7d < -2 and change_24h < 0:
         signals_list.append("macd_bearish")
         confidence -= CONFIDENCE_MACD
 
