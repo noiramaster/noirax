@@ -556,8 +556,8 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
     mcap = coin.get("market_cap", 1) or 1
     vol_to_mcap = volume / mcap
 
-    # RSI proxy: 24h change mapped to 0-100 scale
-    rsi_proxy = 50 + change_24h * 2
+    # RSI proxy: 24h change mapped to 0-100 scale (wider sensitivity for simplified analysis)
+    rsi_proxy = 50 + change_24h * 4
     rsi_proxy = max(0, min(100, rsi_proxy))
 
     signal_type = "neutral"
@@ -565,12 +565,16 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
     signals_list = []
     indicators_used = ["RSI(proxy)"]
 
-    if rsi_proxy < RSI_OVERSOLD:
+    # Simplified analysis uses wider thresholds (proxy is lower fidelity than full OHLC RSI)
+    proxy_oversold = max(10, RSI_OVERSOLD - 10)
+    proxy_overbought = min(90, RSI_OVERBOUGHT + 10)
+
+    if rsi_proxy < proxy_oversold:
         signals_list.append("oversold")
         confidence += CONFIDENCE_RSI
         indicators_used.append("MACD(proxy)")
         indicators_used.append("Volume")
-    elif rsi_proxy > RSI_OVERBOUGHT:
+    elif rsi_proxy > proxy_overbought:
         signals_list.append("overbought")
         confidence += CONFIDENCE_RSI
         indicators_used.append("MACD(proxy)")
