@@ -24,7 +24,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("noirax-pipeline")
 
 # --- Configuration ---
-BINANCE_BASE = "https://api.binance.com"
+BINANCE_BASE = os.environ.get("BINANCE_BASE", "https://api.binance.com")
+BINANCE_FALLBACKS = ["https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com"]
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -64,17 +65,42 @@ SUPPORTED_LANGS = ["en", "es", "pt", "fr", "de", "it", "ar"]
 _VALID_BINANCE_SYMBOLS: Optional[set] = None
 
 
+def _try_all_binance_hosts(endpoint: str, params: Optional[dict] = None, timeout: int = 30) -> Optional[dict]:
+    """Try Binance API across all hosts (main + fallbacks), return first success."""
+    hosts = [BINANCE_BASE] + BINANCE_FALLBACKS
+    last_error = None
+    for host in hosts:
+        url = f"{host}{endpoint}"
+        try:
+            resp = requests.get(url, params=params, timeout=timeout)
+            if resp.status_code == 451:
+                logger.debug(f"451 on {host}{endpoint[:30]} — trying alternate host")
+                continue
+            if resp.status_code == 429:
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        except requests.RequestException as e:
+            last_error = e
+            logger.debug(f"Failed {host}: {e}")
+            continue
+    if last_error:
+        raise last_error
+    return None
+
+
 def _get_valid_binance_symbols() -> set:
     """Fetch valid Binance spot symbols from exchangeInfo. Cached."""
     global _VALID_BINANCE_SYMBOLS
     if _VALID_BINANCE_SYMBOLS is not None:
         return _VALID_BINANCE_SYMBOLS
     try:
-        resp = requests.get(f"{BINANCE_BASE}/api/v3/exchangeInfo", timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        _VALID_BINANCE_SYMBOLS = {s["symbol"] for s in data.get("symbols", []) if s.get("status") == "TRADING"}
-        logger.info(f"Loaded {len(_VALID_BINANCE_SYMBOLS)} valid Binance symbols")
+        data = _try_all_binance_hosts("/api/v3/exchangeInfo", timeout=30)
+        if data:
+            _VALID_BINANCE_SYMBOLS = {s["symbol"] for s in data.get("symbols", []) if s.get("status") == "TRADING"}
+            logger.info(f"Loaded {len(_VALID_BINANCE_SYMBOLS)} valid Binance symbols")
+        else:
+            raise ValueError("All hosts failed")
     except Exception as e:
         logger.warning(f"Failed to load exchangeInfo, using fallback: {e}")
         _VALID_BINANCE_SYMBOLS = set()
@@ -82,21 +108,10 @@ def _get_valid_binance_symbols() -> set:
 
 
 def binance_request(endpoint: str, params: Optional[dict] = None) -> dict:
-    """Make request to Binance API with retry and exponential backoff."""
-    url = f"{BINANCE_BASE}{endpoint}"
+    """Make request to Binance API with retry and exponential backoff across all hosts."""
     for attempt in range(3):
         try:
-            resp = requests.get(url, params=params, timeout=30)
-            if resp.status_code == 429:
-                wait = min(2 ** attempt * 10, 60)
-                logger.warning(f"Rate limited (429), waiting {wait}s...")
-                time.sleep(wait)
-                continue
-            if resp.status_code == 400:
-                logger.warning(f"Bad request for {endpoint} with params {params}: {resp.text[:100]}")
-                return {}
-            resp.raise_for_status()
-            return resp.json()
+            return _try_all_binance_hosts(endpoint, params, timeout=30) or {}
         except requests.RequestException as e:
             if attempt < 2:
                 wait = 2 ** attempt * 5
@@ -131,6 +146,7 @@ def get_top_coins(limit: int = 50) -> list:
                 "market_cap": c["market_cap"],
                 "volume_24h": c["total_volume"],
                 "current_price": c["current_price"],
+                "coingecko_id": c["id"],
             }
             for c in coins
             if c.get("market_cap") and c.get("total_volume", 0) >= MIN_VOLUME_24H
@@ -138,33 +154,59 @@ def get_top_coins(limit: int = 50) -> list:
     except Exception as e:
         logger.error(f"CoinGecko request failed: {e}")
         fallback = [
-            {"symbol": "BTCUSDT", "name": "Bitcoin", "market_cap": 1e12, "volume_24h": 1e10, "current_price": 60000},
-            {"symbol": "ETHUSDT", "name": "Ethereum", "market_cap": 5e11, "volume_24h": 5e9, "current_price": 3000},
-            {"symbol": "BNBUSDT", "name": "BNB", "market_cap": 1e11, "volume_24h": 1e9, "current_price": 500},
-            {"symbol": "SOLUSDT", "name": "Solana", "market_cap": 8e10, "volume_24h": 8e8, "current_price": 150},
-            {"symbol": "XRPUSDT", "name": "XRP", "market_cap": 5e10, "volume_24h": 5e8, "current_price": 0.5},
+            {"symbol": "BTCUSDT", "name": "Bitcoin", "market_cap": 1e12, "volume_24h": 1e10, "current_price": 60000, "coingecko_id": "bitcoin"},
+            {"symbol": "ETHUSDT", "name": "Ethereum", "market_cap": 5e11, "volume_24h": 5e9, "current_price": 3000, "coingecko_id": "ethereum"},
+            {"symbol": "BNBUSDT", "name": "BNB", "market_cap": 1e11, "volume_24h": 1e9, "current_price": 500, "coingecko_id": "bnb"},
+            {"symbol": "SOLUSDT", "name": "Solana", "market_cap": 8e10, "volume_24h": 8e8, "current_price": 150, "coingecko_id": "solana"},
+            {"symbol": "XRPUSDT", "name": "XRP", "market_cap": 5e10, "volume_24h": 5e8, "current_price": 0.5, "coingecko_id": "ripple"},
         ]
         logger.warning("Using fallback coin list")
         return fallback
 
 
-def get_klines(symbol: str, interval: str = "1h", limit: int = 200) -> pd.DataFrame:
-    """Fetch OHLCV klines from Binance."""
+def get_klines(symbol: str, interval: str = "1h", limit: int = 200, coingecko_id: Optional[str] = None) -> pd.DataFrame:
+    """Fetch OHLCV klines from Binance, falls back to CoinGecko OHLC if Binance is blocked."""
     data = binance_request("/api/v3/klines", {
         "symbol": symbol,
         "interval": interval,
         "limit": limit,
     })
-    df = pd.DataFrame(data, columns=[
-        "timestamp", "open", "high", "low", "close", "volume",
-        "close_time", "quote_asset_volume", "number_of_trades",
-        "taker_buy_base_vol", "taker_buy_quote_vol", "ignore"
-    ])
-    df = df[["timestamp", "open", "high", "low", "close", "volume"]]
-    for col in ["open", "high", "low", "close", "volume"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-    return df
+    if data:
+        df = pd.DataFrame(data, columns=[
+            "timestamp", "open", "high", "low", "close", "volume",
+            "close_time", "quote_asset_volume", "number_of_trades",
+            "taker_buy_base_vol", "taker_buy_quote_vol", "ignore"
+        ])
+        df = df[["timestamp", "open", "high", "low", "close", "volume"]]
+        for col in ["open", "high", "low", "close", "volume"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        return df
+
+    # Fallback: try CoinGecko OHLC (frees data source that works from GitHub Actions)
+    if coingecko_id:
+        try:
+            interval_map = {"1h": 1, "4h": 2, "1d": 7}  # CoinGecko uses different day ranges
+            days = interval_map.get(interval, 1)
+            resp = requests.get(
+                f"{COINGECKO_BASE}/coins/{coingecko_id}/ohlc",
+                params={"vs_currency": "usd", "days": days},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                ohlc_data = resp.json()
+                if ohlc_data and len(ohlc_data) >= 20:
+                    rows = []
+                    for entry in ohlc_data:
+                        ts, o, h, l, c = entry[:5]
+                        rows.append({"timestamp": pd.to_datetime(ts, unit="ms"), "open": o, "high": h, "low": l, "close": c, "volume": 0})
+                    df = pd.DataFrame(rows)
+                    logger.info(f"Got {len(df)} CoinGecko OHLC candles for {symbol}")
+                    return df
+        except Exception as e:
+            logger.debug(f"CoinGecko OHLC fallback failed for {symbol}: {e}")
+
+    return pd.DataFrame()
 
 
 def calculate_indicators(df: pd.DataFrame) -> dict:
@@ -529,7 +571,7 @@ def write_status_json():
     """Write heartbeat status file for cron anti-desactivation."""
     try:
         status = {"last_run": datetime.now(timezone.utc).isoformat(), "status": "ok"}
-        with open("pipeline/status.json", "w") as f:
+        with open("status.json", "w") as f:
             json.dump(status, f)
         logger.info("Status file written")
     except Exception as e:
@@ -554,13 +596,18 @@ def main():
     # Get top coins
     coins = get_top_coins(limit=50)
 
-    # Filter to only valid Binance symbols
+    # Filter to only valid Binance symbols (skip filter if exchangeInfo unavailable)
     valid_symbols = _get_valid_binance_symbols()
     if valid_symbols:
         original_count = len(coins)
         coins = [c for c in coins if c["symbol"] in valid_symbols]
         logger.info(f"Filtered {original_count} coins to {len(coins)} with valid Binance symbols")
+    else:
+        logger.info("Binance exchangeInfo unavailable — skipping symbol filter, using all coins")
     logger.info(f"Found {len(coins)} coins with sufficient volume")
+
+    # Build coin_id map for CoinGecko fallback
+    coin_id_map = {c["symbol"]: c.get("coingecko_id", "") for c in coins}
 
     free_coins = [c["symbol"] for c in coins[:TOP_COINS_FREE]]
     premium_coins = [c["symbol"] for c in coins[TOP_COINS_FREE:]]
@@ -571,7 +618,7 @@ def main():
     # First pass: technical + fundamental analysis
     for coin_symbol in free_coins + premium_coins:
         try:
-            df = get_klines(coin_symbol, interval=DEFAULT_TIMEFRAME)
+            df = get_klines(coin_symbol, interval=DEFAULT_TIMEFRAME, coingecko_id=coin_id_map.get(coin_symbol, ""))
             if df.empty or len(df) < 50:
                 continue
 
