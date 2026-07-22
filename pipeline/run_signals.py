@@ -147,6 +147,8 @@ def get_top_coins(limit: int = 50) -> list:
                 "volume_24h": c["total_volume"],
                 "current_price": c["current_price"],
                 "coingecko_id": c["id"],
+                "price_change_percentage_24h": c.get("price_change_percentage_24h", 0),
+                "price_change_percentage_7d_in_currency": c.get("price_change_percentage_7d_in_currency", 0),
             }
             for c in coins
             if c.get("market_cap") and c.get("total_volume", 0) >= MIN_VOLUME_24H
@@ -154,11 +156,11 @@ def get_top_coins(limit: int = 50) -> list:
     except Exception as e:
         logger.error(f"CoinGecko request failed: {e}")
         fallback = [
-            {"symbol": "BTCUSDT", "name": "Bitcoin", "market_cap": 1e12, "volume_24h": 1e10, "current_price": 60000, "coingecko_id": "bitcoin"},
-            {"symbol": "ETHUSDT", "name": "Ethereum", "market_cap": 5e11, "volume_24h": 5e9, "current_price": 3000, "coingecko_id": "ethereum"},
-            {"symbol": "BNBUSDT", "name": "BNB", "market_cap": 1e11, "volume_24h": 1e9, "current_price": 500, "coingecko_id": "bnb"},
-            {"symbol": "SOLUSDT", "name": "Solana", "market_cap": 8e10, "volume_24h": 8e8, "current_price": 150, "coingecko_id": "solana"},
-            {"symbol": "XRPUSDT", "name": "XRP", "market_cap": 5e10, "volume_24h": 5e8, "current_price": 0.5, "coingecko_id": "ripple"},
+            {"symbol": "BTCUSDT", "name": "Bitcoin", "market_cap": 1e12, "volume_24h": 1e10, "current_price": 60000, "coingecko_id": "bitcoin", "price_change_percentage_24h": 0, "price_change_percentage_7d_in_currency": 0},
+            {"symbol": "ETHUSDT", "name": "Ethereum", "market_cap": 5e11, "volume_24h": 5e9, "current_price": 3000, "coingecko_id": "ethereum", "price_change_percentage_24h": 0, "price_change_percentage_7d_in_currency": 0},
+            {"symbol": "BNBUSDT", "name": "BNB", "market_cap": 1e11, "volume_24h": 1e9, "current_price": 500, "coingecko_id": "bnb", "price_change_percentage_24h": 0, "price_change_percentage_7d_in_currency": 0},
+            {"symbol": "SOLUSDT", "name": "Solana", "market_cap": 8e10, "volume_24h": 8e8, "current_price": 150, "coingecko_id": "solana", "price_change_percentage_24h": 0, "price_change_percentage_7d_in_currency": 0},
+            {"symbol": "XRPUSDT", "name": "XRP", "market_cap": 5e10, "volume_24h": 5e8, "current_price": 0.5, "coingecko_id": "ripple", "price_change_percentage_24h": 0, "price_change_percentage_7d_in_currency": 0},
         ]
         logger.warning("Using fallback coin list")
         return fallback
@@ -541,7 +543,88 @@ def insert_signal(supabase_client, signal_data: dict) -> bool:
         return False
 
 
-def create_slug(coin: str, signal_type: str, timestamp: str) -> str:
+def calculate_simple_signal(coin: dict) -> Optional[dict]:
+    """Generate signal from CoinGecko market data (used when Binance is blocked).
+    
+    Uses 24h and 7d price change as RSI proxy, volume vs market_cap as volume proxy.
+    Returns same structure as calculate_indicators() or None if neutral.
+    """
+    price = coin.get("current_price", 0)
+    change_24h = coin.get("price_change_percentage_24h", 0) or 0
+    change_7d = coin.get("price_change_percentage_7d_in_currency", 0) or 0
+    volume = coin.get("total_volume", 0) or 0
+    mcap = coin.get("market_cap", 1) or 1
+    vol_to_mcap = volume / mcap
+
+    # RSI proxy: 24h change mapped to 0-100 scale
+    rsi_proxy = 50 + change_24h * 2
+    rsi_proxy = max(0, min(100, rsi_proxy))
+
+    signal_type = "neutral"
+    confidence = 0
+    signals_list = []
+    indicators_used = ["RSI(proxy)"]
+
+    if rsi_proxy < RSI_OVERSOLD:
+        signals_list.append("oversold")
+        confidence += CONFIDENCE_RSI
+        indicators_used.append("MACD(proxy)")
+        indicators_used.append("Volume")
+    elif rsi_proxy > RSI_OVERBOUGHT:
+        signals_list.append("overbought")
+        confidence += CONFIDENCE_RSI
+        indicators_used.append("MACD(proxy)")
+        indicators_used.append("Volume")
+
+    # 7d trend as MACD proxy
+    if change_7d > 5 and change_24h > 0:
+        signals_list.append("macd_bullish")
+        confidence += CONFIDENCE_MACD
+    elif change_7d < -5 and change_24h < 0:
+        signals_list.append("macd_bearish")
+        confidence -= CONFIDENCE_MACD
+
+    # Volume proxy
+    if vol_to_mcap > 0.1:
+        signals_list.append("volume_spike")
+        confidence += CONFIDENCE_VOLUME
+
+    # Near support/resistance proxy using 7d range
+    if change_7d < -10:
+        signals_list.append("near_support")
+        confidence += CONFIDENCE_SUPPORT
+    elif change_7d > 10:
+        signals_list.append("near_resistance")
+        confidence -= CONFIDENCE_RESISTANCE
+
+    buy_signals = sum(1 for s in signals_list if s in ["oversold", "macd_bullish", "near_support"])
+    sell_signals = sum(1 for s in signals_list if s in ["overbought", "macd_bearish", "near_resistance"])
+
+    if buy_signals > sell_signals and confidence >= 20:
+        signal_type = "buy"
+    elif sell_signals > buy_signals and abs(confidence) >= 20:
+        signal_type = "sell"
+
+    if signal_type == "neutral":
+        return None
+
+    # Approximate ATR from 24h price range
+    atr = abs(price * change_24h / 100) if change_24h != 0 else price * 0.01
+
+    return {
+        "signal_type": signal_type,
+        "confidence": min(abs(confidence), 95),
+        "rsi": round(rsi_proxy, 1),
+        "macd_bullish": change_7d > 5 and change_24h > 0,
+        "sma_bullish": change_7d > 0,
+        "volume_spike": vol_to_mcap > 0.1,
+        "current_price": price,
+        "recent_high": price * (1 + abs(change_24h / 100)),
+        "recent_low": price * (1 - abs(change_24h / 100)),
+        "atr": atr,
+        "volatility": abs(change_24h) / 100,
+        "indicators_used": indicators_used,
+    }
     """Create SEO-friendly URL slug for a signal."""
     coin_clean = coin.replace("/", "-").lower()
     ts_formatted = datetime.fromisoformat(timestamp).strftime("%Y-%m-%d-%H%M") if timestamp else datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M")
@@ -622,14 +705,16 @@ def main():
     test_data = binance_request("/api/v3/klines", {"symbol": "BTCUSDT", "interval": "1h", "limit": 3})
     if not test_data:
         binance_blocked = True
-        logger.info("Binance API blocked — will use CoinGecko OHLC fallback")
-        # Limit coins to CoinGecko-friendly count to avoid rate limiting
-        max_cg_coins = int(os.environ.get("TECH_TOP_COINS_FREE", "15")) + 5
-        coins = coins[:max_cg_coins]
-        logger.info(f"Limited to {len(coins)} coins for CoinGecko-based analysis")
+        logger.info("Binance API blocked — using simplified analysis from CoinGecko market data (no per-coin OHLC calls)")
+        # Limit coin count (free + 5 premium is manageable without rate limits)
+        max_simple_coins = int(os.environ.get("TECH_TOP_COINS_FREE", "15")) + 5
+        coins = coins[:max_simple_coins]
+        logger.info(f"Limited to {len(coins)} coins for simplified analysis")
 
     # Build coin_id map for CoinGecko fallback
     coin_id_map = {c["symbol"]: c.get("coingecko_id", "") for c in coins}
+    # Also build a dict for fast coin lookup by symbol
+    coin_dict = {c["symbol"]: c for c in coins}
 
     free_coins = [c["symbol"] for c in coins[:TOP_COINS_FREE]]
     premium_coins = [c["symbol"] for c in coins[TOP_COINS_FREE:]]
@@ -640,18 +725,22 @@ def main():
     # First pass: technical + fundamental analysis
     for coin_symbol in free_coins + premium_coins:
         try:
-            df = get_klines(coin_symbol, interval=DEFAULT_TIMEFRAME, coingecko_id=coin_id_map.get(coin_symbol, ""))
-            # CoinGecko fallback returns fewer candles; accept lower minimum
-            min_candles = 20 if not df.empty and df["volume"].sum() == 0 else 50
-            if df.empty or len(df) < min_candles:
-                continue
-            
-            # Small delay between coins to avoid CoinGecko rate limiting
-            time.sleep(3.0)
-
-            analysis = calculate_indicators(df)
-            if analysis["signal_type"] == "neutral":
-                continue
+            if binance_blocked:
+                # Simplified analysis using CoinGecko market data (bulk, no per-coin API calls)
+                coin_data = coin_dict.get(coin_symbol)
+                if not coin_data:
+                    continue
+                analysis = calculate_simple_signal(coin_data)
+                if analysis is None:
+                    continue
+            else:
+                # Full analysis using Binance OHLC klines
+                df = get_klines(coin_symbol, interval=DEFAULT_TIMEFRAME)
+                if df.empty or len(df) < 50:
+                    continue
+                analysis = calculate_indicators(df)
+                if analysis["signal_type"] == "neutral":
+                    continue
 
             # Fundamental analysis (all 4 sources)
             fund_result = analyze_fundamental(coin_symbol)
