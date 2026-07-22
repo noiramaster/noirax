@@ -188,7 +188,7 @@ def get_klines(symbol: str, interval: str = "1h", limit: int = 200, coingecko_id
     # Fallback: try CoinGecko OHLC (frees data source that works from GitHub Actions)
     if coingecko_id:
         try:
-            interval_map = {"1h": 3, "4h": 7, "1d": 14}
+            interval_map = {"1h": 1, "4h": 7, "1d": 30}
             days = interval_map.get(interval, 3)
             resp = requests.get(
                 f"{COINGECKO_BASE}/coins/{coingecko_id}/ohlc",
@@ -353,7 +353,7 @@ def fetch_coingecko_ohlc(coingecko_id: str, interval: str = "1h") -> Optional[pd
     Returns DataFrame with columns: timestamp, open, high, low, close, volume
     or None if rate limited / failed.
     """
-    interval_days = {"1h": 3, "4h": 7, "1d": 14}
+    interval_days = {"1h": 1, "4h": 7, "1d": 30}
     days = interval_days.get(interval, 3)
     for attempt in range(3):
         try:
