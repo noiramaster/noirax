@@ -186,7 +186,7 @@ def get_klines(symbol: str, interval: str = "1h", limit: int = 200, coingecko_id
     # Fallback: try CoinGecko OHLC (frees data source that works from GitHub Actions)
     if coingecko_id:
         try:
-            interval_map = {"1h": 1, "4h": 2, "1d": 7}  # CoinGecko uses different day ranges
+            interval_map = {"1h": 3, "4h": 7, "1d": 14}  # CoinGecko day ranges for enough candles
             days = interval_map.get(interval, 1)
             resp = requests.get(
                 f"{COINGECKO_BASE}/coins/{coingecko_id}/ohlc",
@@ -619,7 +619,9 @@ def main():
     for coin_symbol in free_coins + premium_coins:
         try:
             df = get_klines(coin_symbol, interval=DEFAULT_TIMEFRAME, coingecko_id=coin_id_map.get(coin_symbol, ""))
-            if df.empty or len(df) < 50:
+            # CoinGecko fallback returns fewer candles; accept lower minimum
+            min_candles = 20 if not df.empty and df["volume"].sum() == 0 else 50
+            if df.empty or len(df) < min_candles:
                 continue
 
             analysis = calculate_indicators(df)
