@@ -20,18 +20,18 @@ from typing import Optional
 logger = logging.getLogger("noirax-fundamental")
 
 # --- Proprietary parameters from environment (GitHub Secrets) ---
-WHALE_THRESHOLD_BTC = float(os.environ.get("FUND_WHALE_THRESHOLD_BTC", "20.0"))
-FUNDING_RATE_HIGH = float(os.environ.get("FUND_FUNDING_RATE_HIGH", "0.0005"))
-FUNDING_RATE_LOW = float(os.environ.get("FUND_FUNDING_RATE_LOW", "-0.0005"))
-FUNDING_RATE_ELEVATED = float(os.environ.get("FUND_FUNDING_RATE_ELEVATED", "0.0002"))
-VOLUME_QUOTE_THRESHOLD = float(os.environ.get("FUND_VOLUME_QUOTE_THRESHOLD", "50000000"))
-VOLUME_PRICE_CHANGE_PCT = float(os.environ.get("FUND_VOLUME_PRICE_CHANGE_PCT", "5.0"))
-VOLUME_ELEVATED_CHANGE_PCT = float(os.environ.get("FUND_VOLUME_ELEVATED_CHANGE_PCT", "2.0"))
-SCORE_CLAMP_HIGH = int(os.environ.get("FUND_SCORE_CLAMP_HIGH", "3"))
-SCORE_CLAMP_MEDIUM = int(os.environ.get("FUND_SCORE_CLAMP_MEDIUM", "1"))
-SCORE_CLAMP_NEG_HIGH = int(os.environ.get("FUND_SCORE_CLAMP_NEG_HIGH", "-3"))
-SCORE_CLAMP_NEG_MEDIUM = int(os.environ.get("FUND_SCORE_CLAMP_NEG_MEDIUM", "-1"))
-NEWS_BULL_MIN_COUNT = int(os.environ.get("FUND_NEWS_BULL_MIN_COUNT", "2"))
+WHALE_THRESHOLD_BTC = float(os.environ.get("FUND_WHALE_THRESHOLD_BTC", "999.0"))
+FUNDING_RATE_HIGH = float(os.environ.get("FUND_FUNDING_RATE_HIGH", "0.5"))
+FUNDING_RATE_LOW = float(os.environ.get("FUND_FUNDING_RATE_LOW", "-0.5"))
+FUNDING_RATE_ELEVATED = float(os.environ.get("FUND_FUNDING_RATE_ELEVATED", "0.1"))
+VOLUME_QUOTE_THRESHOLD = float(os.environ.get("FUND_VOLUME_QUOTE_THRESHOLD", "999999999"))
+VOLUME_PRICE_CHANGE_PCT = float(os.environ.get("FUND_VOLUME_PRICE_CHANGE_PCT", "100.0"))
+VOLUME_ELEVATED_CHANGE_PCT = float(os.environ.get("FUND_VOLUME_ELEVATED_CHANGE_PCT", "50.0"))
+SCORE_CLAMP_HIGH = int(os.environ.get("FUND_SCORE_CLAMP_HIGH", "10"))
+SCORE_CLAMP_MEDIUM = int(os.environ.get("FUND_SCORE_CLAMP_MEDIUM", "5"))
+SCORE_CLAMP_NEG_HIGH = int(os.environ.get("FUND_SCORE_CLAMP_NEG_HIGH", "-10"))
+SCORE_CLAMP_NEG_MEDIUM = int(os.environ.get("FUND_SCORE_CLAMP_NEG_MEDIUM", "-5"))
+NEWS_BULL_MIN_COUNT = int(os.environ.get("FUND_NEWS_BULL_MIN_COUNT", "99"))
 
 # --- RSS keyword lists (from OmniBot v4) ---
 BULLISH_WORDS = [
