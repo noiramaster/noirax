@@ -617,6 +617,17 @@ def main():
         logger.info("Binance exchangeInfo unavailable — skipping symbol filter, using all coins")
     logger.info(f"Found {len(coins)} coins with sufficient volume")
 
+    # Detect if Binance is geo-blocked (common on GitHub Actions)
+    binance_blocked = False
+    test_data = binance_request("/api/v3/klines", {"symbol": "BTCUSDT", "interval": "1h", "limit": 3})
+    if not test_data:
+        binance_blocked = True
+        logger.info("Binance API blocked — will use CoinGecko OHLC fallback")
+        # Limit coins to CoinGecko-friendly count to avoid rate limiting
+        max_cg_coins = int(os.environ.get("TECH_TOP_COINS_FREE", "15")) + 5
+        coins = coins[:max_cg_coins]
+        logger.info(f"Limited to {len(coins)} coins for CoinGecko-based analysis")
+
     # Build coin_id map for CoinGecko fallback
     coin_id_map = {c["symbol"]: c.get("coingecko_id", "") for c in coins}
 
@@ -636,7 +647,7 @@ def main():
                 continue
             
             # Small delay between coins to avoid CoinGecko rate limiting
-            time.sleep(2.0)
+            time.sleep(3.0)
 
             analysis = calculate_indicators(df)
             if analysis["signal_type"] == "neutral":
