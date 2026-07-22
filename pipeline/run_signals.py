@@ -368,7 +368,7 @@ def fetch_coingecko_ohlc(coingecko_id: str, interval: str = "1h") -> Optional[pd
                 time.sleep(wait)
                 continue
             if resp.status_code != 200:
-                logger.debug(f"CoinGecko OHLC HTTP {resp.status_code} for {coingecko_id}")
+                logger.info(f"CoinGecko OHLC HTTP {resp.status_code} for {coingecko_id}")
                 return None
             ohlc_data = resp.json()
             if not ohlc_data or len(ohlc_data) < 20:
@@ -840,7 +840,10 @@ def main():
             if binance_blocked:
                 cg_id = coin_data.get("coingecko_id", "")
                 if cg_id:
+                    logger.info(f"Fetching real OHLC for {coin_symbol} (id={cg_id})...")
                     enhanced = enhance_with_real_ohlc(analysis, coin_symbol, cg_id)
+                    if enhanced != analysis:
+                        logger.info(f"Enhanced {coin_symbol} with real OHLC indicators")
                     analysis = enhanced
 
             # Calculate dual TP/SL levels
