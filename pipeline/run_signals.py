@@ -623,6 +623,9 @@ def main():
             min_candles = 20 if not df.empty and df["volume"].sum() == 0 else 50
             if df.empty or len(df) < min_candles:
                 continue
+            
+            # Small delay between coins to avoid CoinGecko rate limiting
+            time.sleep(0.5)
 
             analysis = calculate_indicators(df)
             if analysis["signal_type"] == "neutral":
