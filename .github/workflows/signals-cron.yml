@@ -1,0 +1,49 @@
+name: NOIRAX Signal Pipeline
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  generate-signals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: pipeline/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd pipeline
+          pip install -r requirements.txt
+
+      - name: Run signal pipeline
+        id: pipeline
+        run: |
+          cd pipeline
+          python run_signals.py
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          AI_PROVIDER: ${{ secrets.AI_PROVIDER || 'gemini' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SIGNALS_MIN_VOLUME_24H_USD: ${{ vars.SIGNALS_MIN_VOLUME_24H_USD || '1000000' }}
+
+      - name: Heartbeat - commit status
+        run: |
+          git config user.name "noirax-bot"
+          git config user.email "bot@noirax.ai"
+          git add pipeline/status.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: pipeline heartbeat [skip ci]"
+          git push origin master || echo "No changes to push"

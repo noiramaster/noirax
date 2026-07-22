@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #000000;
+  --color-foreground: #e0e0e0;
+  --color-accent-green: #39FF14;
+  --color-accent-red: #FF3B3B;
+  --color-accent-magenta: #D63384;
+  --color-terminal-prompt: #39FF14;
+  --color-terminal-text: #c0c0c0;
+  --color-muted: #666666;
+  --color-border: #222222;
+  --color-risk-low: #39FF14;
+  --color-risk-medium: #FFD700;
+  --color-risk-high: #FF3B3B;
+  --font-sans: var(--font-sans, 'Inter', system-ui, sans-serif);
+  --font-mono: var(--font-mono, 'JetBrains Mono', monospace);
+}
+
+body {
+  background: #000000;
+  color: var(--color-foreground, #e0e0e0);
+  font-family: var(--font-sans);
+}
+
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] .space-x-reverse > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+.typing-animation {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  animation: typing 2s steps(40, end);
+}
+
+.rtl\:mirror {
+  transform: scaleX(-1);
+}

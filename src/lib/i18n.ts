@@ -1,0 +1,182 @@
+type TranslationValue = string | string[] | { [key: string]: TranslationValue };
+
+type Translations = {
+  [key: string]: TranslationValue;
+};
+
+export const LOCALES = ['en', 'es', 'pt', 'fr', 'de', 'it', 'ar'] as const;
+export type Locale = (typeof LOCALES)[number];
+export const RTL_LOCALES: Locale[] = ['ar'];
+export const DEFAULT_LOCALE: Locale = 'en';
+
+export function isRTL(locale: string): boolean {
+  return RTL_LOCALES.includes(locale as Locale);
+}
+
+// Helper to avoid writing empty stubs for every language
+function sameAsEn(): Translations {
+  return {} as Translations;
+}
+
+const en: Translations = {
+  nav: { home: 'Home', free: 'Free Signals', premium: 'Premium', trackRecord: 'Track Record', pricing: 'Pricing', login: 'Login', signup: 'Sign Up', account: 'My Account', logout: 'Logout', blog: 'Blog' },
+  home: { title: 'NOIRAX', subtitle: 'Autonomous Crypto Trading Signal System', terminalIntro: '> Multi-coin technical + fundamental analysis system started', terminalAwaiting: '> Awaiting market data...', latestSignals: 'Latest Signals', ctaPremium: 'Unlock Premium', ctaFree: 'View Free Signals', disclaimer: 'Educational and informational content. Not financial advice.', typingText: 'Analyzing 100+ pairs with technical + fundamental data' },
+  free: { title: 'Free Signals', subtitle: 'Real-time signals for the top 15 cryptocurrencies', delayWarning: 'Free signals cover the top 15 coins by market cap with conservative targets.', exchangeDisclaimer: 'Trade on recommended exchanges. These signals are educational.', noSignals: 'No signals available at this time.', refreshIn: 'Refresh in' },
+  premium: { title: 'Premium Signals', subtitle: 'Full universe, optimized targets, advanced analysis', upgradePrompt: 'Unlock the full potential with NOIRAX Premium', upgradeButton: 'View Plans', filters: 'Filters', allCoins: 'All coins', confidence: 'Min confidence', timeframe: 'Timeframe', positionCalculator: 'Position Calculator', capital: 'Capital ($)', riskPercent: 'Risk (%)', positionSize: 'Position Size', riskLevel: 'Risk Level', low: 'Low', medium: 'Medium', high: 'High' },
+  trackRecord: { title: 'Track Record', subtitle: 'Complete signal history. Unfiltered, transparent results.', winRate: 'Win Rate', totalSignals: 'Total Signals', wins: 'Wins', losses: 'Losses', pending: 'Pending', noData: 'No historical data available.' },
+  legal: { title: 'Legal Notice', disclaimer: 'NOIRAX is an educational and informational platform about cryptocurrency technical analysis. Nothing on this site constitutes financial advice, investment recommendation, or solicitation to buy or sell assets. Cryptocurrency trading carries a high risk of financial loss. We do not guarantee any profitability. Past results are not indicative of future results. Consult a certified financial advisor before making investment decisions.', riskWarning: 'RISK WARNING: Cryptocurrency trading can result in total loss of your invested capital. Only trade with money you can afford to lose.', affiliateDisclaimer: 'Some links on this site are affiliate links. We may receive commissions at no extra cost to you.', spainWarning: 'NOIRAX is not a registered investment advisor. This content is for educational purposes only and does not constitute investment advice regulated by any financial authority, including the CNMV (Spain) or SEC (USA).' },
+  auth: { loginTitle: 'Login', signupTitle: 'Create Account', email: 'Email', password: 'Password', loginButton: 'Login', signupButton: 'Sign Up', magicLink: 'Send Magic Link', noAccount: "Don't have an account?", hasAccount: 'Already have an account?', error: 'Authentication error', success: 'Operation successful', checkEmail: 'Check your email for the login link.', googleLogin: 'Continue with Google', googleSignup: 'Continue with Google', orContinue: 'or' },
+  pricing: { title: 'Pricing', free: { name: 'Free', price: 'Free', description: 'Real-time signals for top coins', features: ['Top 15 crypto signals', 'Real-time updates', 'Conservative TP/SL targets', 'Technical + fundamental analysis', 'Public access'] }, premium: { name: 'Premium', price: '€7.99/mo', description: 'Full universe with optimized targets', features: ['Full coin universe (50+)', 'Optimized TP1/TP2/TP3 ladder', 'Extended risk/reward targets', 'Position calculator', 'Advanced track record filters', 'Priority AI explanations', 'Fundamental signal tags'], cta: 'Subscribe' }, annual: { name: 'Annual Premium', price: '€79/yr', description: 'Save 2 months', features: ['Everything in Premium', '2 months free'], cta: 'Subscribe' } },
+  common: { loading: 'Loading...', error: 'Error', retry: 'Retry', close: 'Close', learnMore: 'Learn More', subscribe: 'Subscribe', comingSoon: 'Coming Soon', language: 'Language', readMore: 'Read More', backToHome: 'Back to Home', shareSignal: 'Share Signal' },
+  premiumPrompt: { title: 'Premium Signal', description: 'This is a premium signal. Subscribe to view the full analysis.', cta: 'View Premium Plans', later: 'Not now' },
+  disclaimerBanner: { text: 'Educational content. Not financial advice. Trading involves risk of loss.' },
+  blog: { title: 'NOIRAX Blog', subtitle: 'Educational content about technical analysis and crypto trading.', readMore: 'Read More', noPosts: 'No posts yet.', related: 'Related Articles' },
+  signal: { buySignal: 'BUY Signal', sellSignal: 'SELL Signal', entryZone: 'Entry Zone', stopLoss: 'Stop Loss', takeProfit: 'Take Profit', riskReward: 'Risk/Reward', indicators: 'Indicators Used', verified: 'Verified', pending: 'Pending', generated: 'Generated', learnMoreAbout: 'Learn more about', learnAboutRsi: 'Learn more about RSI', learnAboutMacd: 'Learn more about MACD', whyThisSignal: 'Why this signal?', viewOnTrackRecord: 'View in Track Record', share: 'Share Signal' },
+};
+
+const es: Translations = {
+  nav: { home: 'Inicio', free: 'Señales Free', premium: 'Premium', trackRecord: 'Track Record', pricing: 'Planes', login: 'Iniciar Sesión', signup: 'Registrarse', account: 'Mi Cuenta', logout: 'Cerrar Sesión', blog: 'Blog' },
+  home: { title: 'NOIRAX', subtitle: 'Sistema Autónomo de Señales de Trading Cripto', terminalIntro: '> Sistema de análisis técnico + fundamental multi-moneda iniciado', terminalAwaiting: '> Esperando datos de mercado...', latestSignals: 'Últimas Señales', ctaPremium: 'Desbloquear Premium', ctaFree: 'Ver Señales Free', disclaimer: 'Contenido educativo e informativo. No es asesoría financiera.', typingText: 'Analizando 100+ pares con datos técnicos + fundamentales' },
+  free: { title: 'Señales Free', subtitle: 'Señales en tiempo real para las principales criptomonedas', delayWarning: 'Las señales free cubren las 15 principales monedas por market cap con objetivos conservadores.', exchangeDisclaimer: 'Opera en exchanges recomendados. Estas señales son educativas.', noSignals: 'No hay señales disponibles en este momento.', refreshIn: 'Actualización en' },
+  premium: { title: 'Señales Premium', subtitle: 'Universo completo, objetivos optimizados, análisis avanzado', upgradePrompt: 'Desbloquea todo el potencial con NOIRAX Premium', upgradeButton: 'Ver Planes', filters: 'Filtros', allCoins: 'Todas las monedas', confidence: 'Confianza mínima', timeframe: 'Timeframe', positionCalculator: 'Calculadora de Posición', capital: 'Capital ($)', riskPercent: 'Riesgo (%)', positionSize: 'Tamaño de posición', riskLevel: 'Nivel de Riesgo', low: 'Bajo', medium: 'Medio', high: 'Alto' },
+  trackRecord: { title: 'Track Record', subtitle: 'Histórico completo de señales. Sin filtros, sin ocultar resultados.', winRate: 'Win Rate', totalSignals: 'Total Señales', wins: 'Aciertos', losses: 'Fallos', pending: 'Pendientes', noData: 'No hay datos históricos disponibles.' },
+  legal: { title: 'Aviso Legal', disclaimer: 'NOIRAX es una plataforma de contenido educativo e informativo sobre análisis técnico de criptomonedas. Nada en este sitio constituye asesoría financiera, recomendación de inversión o solicitud para comprar o vender activos. El trading de criptomonedas conlleva un alto riesgo de pérdida financiera. No garantizamos rentabilidad alguna. Los resultados pasados no son indicativos de resultados futuros. Consulte a un asesor financiero certificado antes de tomar decisiones de inversión.', riskWarning: 'ADVERTENCIA DE RIESGO: El trading de criptomonedas puede resultar en la pérdida total de su capital invertido. Solo opere con dinero que pueda permitirse perder.', affiliateDisclaimer: 'Algunos enlaces en este sitio son de afiliados. Podemos recibir comisiones sin costo adicional para usted.', spainWarning: 'NOIRAX no es un servicio de asesoramiento de inversión regulado por la CNMV. Este contenido es exclusivamente educativo/informativo. El usuario opera bajo su propia responsabilidad. Consulte a un asesor financiero certificado antes de tomar decisiones de inversión.' },
+  auth: { loginTitle: 'Iniciar Sesión', signupTitle: 'Crear Cuenta', email: 'Correo electrónico', password: 'Contraseña', loginButton: 'Iniciar Sesión', signupButton: 'Registrarse', magicLink: 'Enviar Magic Link', noAccount: '¿No tienes cuenta?', hasAccount: '¿Ya tienes cuenta?', error: 'Error de autenticación', success: 'Operación exitosa', checkEmail: 'Revisa tu correo para el enlace de acceso.', googleLogin: 'Continuar con Google', googleSignup: 'Continuar con Google', orContinue: 'o' },
+  pricing: { title: 'Planes', free: { name: 'Free', price: 'Gratis', description: 'Señales en tiempo real para las principales monedas', features: ['Señales top 15 criptomonedas', 'Actualizaciones en tiempo real', 'Objetivos TP/SL conservadores', 'Análisis técnico + fundamental', 'Acceso público'] }, premium: { name: 'Premium', price: '7,99€/mes', description: 'Universo completo con objetivos optimizados', features: ['Universo completo (50+ monedas)', 'Escalera TP1/TP2/TP3 optimizada', 'Objetivos risk/reward extendidos', 'Calculadora de posición', 'Filtros avanzados de track record', 'Explicaciones IA prioritarias', 'Tags de señales fundamentales'], cta: 'Suscribirse' }, annual: { name: 'Premium Anual', price: '79€/año', description: 'Ahorra 2 meses', features: ['Todo lo de Premium', '2 meses gratis'], cta: 'Suscribirse' } },
+  common: { loading: 'Cargando...', error: 'Error', retry: 'Reintentar', close: 'Cerrar', learnMore: 'Más información', subscribe: 'Suscribirse', comingSoon: 'Próximamente', language: 'Idioma', readMore: 'Leer más', backToHome: 'Volver al Inicio', shareSignal: 'Compartir Señal' },
+  premiumPrompt: { title: 'Señal Premium', description: 'Esta es una señal premium. Suscríbete para ver el análisis completo.', cta: 'Ver Planes Premium', later: 'Ahora no' },
+  disclaimerBanner: { text: 'Contenido educativo. No es asesoría financiera. El trading conlleva riesgo de pérdida.' },
+  blog: { title: 'Blog NOIRAX', subtitle: 'Contenido educativo sobre análisis técnico y trading cripto.', readMore: 'Leer más', noPosts: 'Aún no hay artículos.', related: 'Artículos Relacionados' },
+  signal: { buySignal: 'Señal de COMPRA', sellSignal: 'Señal de VENTA', entryZone: 'Zona de Entrada', stopLoss: 'Stop Loss', takeProfit: 'Take Profit', riskReward: 'Risk/Reward', indicators: 'Indicadores Usados', verified: 'Verificado', pending: 'Pendiente', generated: 'Generado', learnMoreAbout: 'Más información sobre', learnAboutRsi: 'Más información sobre RSI', learnAboutMacd: 'Más información sobre MACD', whyThisSignal: '¿Por qué esta señal?', viewOnTrackRecord: 'Ver en Track Record', share: 'Compartir Señal' },
+};
+
+const pt: Translations = {
+  nav: { home: 'Início', free: 'Sinais Free', premium: 'Premium', trackRecord: 'Histórico', pricing: 'Planos', login: 'Entrar', signup: 'Cadastrar', account: 'Minha Conta', logout: 'Sair', blog: 'Blog' },
+  home: { title: 'NOIRAX', subtitle: 'Sistema Autônomo de Sinais de Trading Cripto', terminalIntro: '> Sistema de análise técnica multi-moeda iniciado', terminalAwaiting: '> Aguardando dados de mercado...', latestSignals: 'Últimos Sinais', ctaPremium: 'Desbloquear Premium', ctaFree: 'Ver Sinais Free', disclaimer: 'Conteúdo educativo e informativo. Não é aconselhamento financeiro.', typingText: 'Analisando mais de 100 pares em tempo real' },
+  legal: { title: 'Aviso Legal', disclaimer: 'NOIRAX é uma plataforma de conteúdo educativo e informativo sobre análise técnica de criptomoedas. Nada neste site constitui aconselhamento financeiro. O trading de criptomoedas envolve alto risco de perda financeira. Não garantimos rentabilidade. Resultados passados não são indicativos de resultados futuros.', riskWarning: 'AVISO DE RISCO: Trading de criptomoedas pode resultar em perda total do capital investido.', affiliateDisclaimer: 'Alguns links são de afiliados. Podemos receber comissões sem custo adicional.', spainWarning: 'Aviso: Verifique a legalidade do trading de cripto no seu país. Este conteúdo é educativo.' },
+  pricing: { title: 'Planos', free: { name: 'Free', price: 'Grátis', description: 'Sinais em tempo real para principais moedas', features: ['Top 15 criptomoedas', 'Atualizações em tempo real', 'Objetivos TP/SL conservadores', 'Análise técnica + fundamental', 'Acesso público'] }, premium: { name: 'Premium', price: '€7,99/mês', description: 'Universo completo com objetivos otimizados', features: ['Universo completo (50+ moedas)', 'Escada TP1/TP2/TP3 otimizada', 'Objetivos risk/reward estendidos', 'Calculadora de posição', 'Filtros avançados de histórico', 'Explicações IA prioritárias', 'Tags de sinais fundamentais'], cta: 'Assinar' }, annual: { name: 'Premium Anual', price: '€79/ano', description: 'Economize 2 meses', features: ['Tudo do Premium', '2 meses grátis'], cta: 'Assinar' } },
+  signal: { buySignal: 'Sinal de COMPRA', sellSignal: 'Sinal de VENDA', entryZone: 'Zona de Entrada', stopLoss: 'Stop Loss', takeProfit: 'Take Profit', riskReward: 'Risco/Retorno', indicators: 'Indicadores', verified: 'Verificado', pending: 'Pendente', generated: 'Gerado' },
+  common: { loading: 'Carregando...', error: 'Erro', retry: 'Tentar novamente', close: 'Fechar', learnMore: 'Saiba mais', subscribe: 'Assinar', language: 'Idioma' },
+  disclaimerBanner: { text: 'Conteúdo educativo. Não é aconselhamento financeiro. Trading envolve risco.' },
+  free: { title: 'Sinais Free', subtitle: 'Sinais em tempo real para as principais criptomoedas', delayWarning: 'Sinais free cobrem as 15 principais moedas por market cap com objetivos conservadores.', exchangeDisclaimer: 'Estes sinais são educativos.', noSignals: 'Nenhum sinal disponível.', refreshIn: 'Atualizar em' },
+  premium: { title: 'Sinais Premium', subtitle: 'Universo completo, objetivos otimizados, análise avançada', upgradePrompt: 'Desbloqueie todo o potencial', upgradeButton: 'Ver Planos', filters: 'Filtros', allCoins: 'Todas moedas', confidence: 'Confiança min', timeframe: 'Timeframe', positionCalculator: 'Calculadora', capital: 'Capital ($)', riskPercent: 'Risco (%)', positionSize: 'Tamanho', riskLevel: 'Nível de Risco', low: 'Baixo', medium: 'Médio', high: 'Alto' },
+  trackRecord: { title: 'Histórico', subtitle: 'Histórico completo de sinais.', winRate: 'Win Rate', totalSignals: 'Total Sinais', wins: 'Acertos', losses: 'Erros', pending: 'Pendentes', noData: 'Sem dados disponíveis.' },
+  auth: { loginTitle: 'Entrar', signupTitle: 'Criar Conta', email: 'Email', password: 'Senha', loginButton: 'Entrar', signupButton: 'Cadastrar', magicLink: 'Enviar Magic Link', noAccount: 'Não tem conta?', hasAccount: 'Já tem conta?', error: 'Erro de autenticação', success: 'Operação concluída', checkEmail: 'Verifique seu email.', googleLogin: 'Continuar com Google', googleSignup: 'Continuar com Google', orContinue: 'ou' },
+  premiumPrompt: { title: 'Sinal Premium', description: 'Assine para ver análise completa.', cta: 'Ver Planos', later: 'Agora não' },
+  blog: { title: 'Blog NOIRAX', subtitle: 'Conteúdo educativo sobre análise técnica.', readMore: 'Ler mais', noPosts: 'Sem artigos ainda.', related: 'Artigos Relacionados' },
+};
+
+const fr: Translations = {
+  nav: { home: 'Accueil', free: 'Signaux Gratuits', premium: 'Premium', trackRecord: 'Historique', pricing: 'Tarifs', login: 'Connexion', signup: "S'inscrire", account: 'Mon Compte', logout: 'Déconnexion', blog: 'Blog' },
+  home: { title: 'NOIRAX', subtitle: 'Système Autonome de Signaux de Trading Crypto', terminalIntro: '> Système d\'analyse technique multi-monnaie démarré', terminalAwaiting: '> Attente des données marché...', latestSignals: 'Derniers Signaux', ctaPremium: 'Débloquer Premium', ctaFree: 'Voir Signaux Gratuits', disclaimer: 'Contenu éducatif et informatif. Pas de conseil financier.', typingText: 'Analyse de 100+ paires en temps réel' },
+  legal: { title: 'Mentions Légales', disclaimer: 'NOIRAX est une plateforme éducative sur l\'analyse technique crypto. Rien sur ce site ne constitue un conseil financier. Le trading de crypto comporte un risque élevé de perte.', riskWarning: 'AVERTISSEMENT : Le trading de crypto peut entraîner une perte totale du capital investi.', affiliateDisclaimer: 'Liens d\'affiliation. Nous pouvons recevoir des commissions.', spainWarning: 'Avis : Vérifiez la légalité du trading crypto dans votre pays. Contenu éducatif uniquement.' },
+  pricing: { title: 'Tarifs', free: { name: 'Gratuit', price: 'Gratuit', description: 'Signaux en temps réel pour les principales cryptos', features: ['Top 15 cryptos', 'Mises à jour temps réel', 'Objectifs TP/SL conservateurs', 'Analyse technique + fondamentale', 'Accès public'] }, premium: { name: 'Premium', price: '7,99€/mois', description: 'Univers complet avec objectifs optimisés', features: ['Univers complet (50+ cryptos)', 'Échelle TP1/TP2/TP3 optimisée', 'Objectifs risk/reward étendus', 'Calculateur de position', 'Filtres historique avancés', 'Explications IA prioritaires', 'Tags signaux fondamentaux'], cta: 'S\'abonner' }, annual: { name: 'Premium Annuel', price: '79€/an', description: 'Économisez 2 mois', features: ['Tout le Premium', '2 mois gratuits'], cta: 'S\'abonner' } },
+  signal: { buySignal: 'Signal ACHAT', sellSignal: 'Signal VENTE', entryZone: 'Zone d\'Entrée', stopLoss: 'Stop Loss', takeProfit: 'Take Profit', riskReward: 'Risque/Rendement', indicators: 'Indicateurs', verified: 'Vérifié', pending: 'En attente', generated: 'Généré' },
+  common: { loading: 'Chargement...', error: 'Erreur', retry: 'Réessayer', close: 'Fermer', learnMore: 'En savoir plus', subscribe: 'S\'abonner', language: 'Langue' },
+  disclaimerBanner: { text: 'Contenu éducatif. Pas un conseil financier. Le trading comporte des risques.' },
+  free: { title: 'Signaux Gratuits', subtitle: 'Signaux en temps réel pour les principales cryptos', delayWarning: 'Les signaux gratuits couvrent les 15 principales cryptos avec des objectifs conservateurs.', exchangeDisclaimer: 'Ces signaux sont éducatifs.', noSignals: 'Aucun signal disponible.', refreshIn: 'Rafraîchir dans' },
+  premium: { title: 'Signaux Premium', subtitle: 'Univers complet, objectifs optimisés, analyse avancée', upgradePrompt: 'Débloquez tout le potentiel', upgradeButton: 'Voir les Offres', filters: 'Filtres', allCoins: 'Toutes', confidence: 'Confiance min', timeframe: 'Timeframe', positionCalculator: 'Calculateur', capital: 'Capital ($)', riskPercent: 'Risque (%)', positionSize: 'Taille', riskLevel: 'Niveau de Risque', low: 'Faible', medium: 'Moyen', high: 'Élevé' },
+  trackRecord: { title: 'Historique', subtitle: 'Historique complet des signaux.', winRate: 'Taux de Réussite', totalSignals: 'Total Signaux', wins: 'Gagnés', losses: 'Perdus', pending: 'En attente', noData: 'Aucune donnée disponible.' },
+  auth: { loginTitle: 'Connexion', signupTitle: 'Créer un Compte', email: 'Email', password: 'Mot de passe', loginButton: 'Connexion', signupButton: "S'inscrire", magicLink: 'Envoyer Magic Link', noAccount: 'Pas de compte ?', hasAccount: 'Déjà un compte ?', error: 'Erreur d\'authentification', success: 'Opération réussie', checkEmail: 'Vérifiez votre email.', googleLogin: 'Continuer avec Google', googleSignup: 'Continuer avec Google', orContinue: 'ou' },
+  premiumPrompt: { title: 'Signal Premium', description: 'Abonnez-vous pour voir l\'analyse complète.', cta: 'Voir les Offres', later: 'Plus tard' },
+  blog: { title: 'Blog NOIRAX', subtitle: 'Contenu éducatif sur l\'analyse technique.', readMore: 'Lire plus', noPosts: 'Pas encore d\'articles.', related: 'Articles Similaires' },
+};
+
+const de: Translations = {
+  nav: { home: 'Start', free: 'Kostenlose Signale', premium: 'Premium', trackRecord: 'Aufzeichnung', pricing: 'Preise', login: 'Anmelden', signup: 'Registrieren', account: 'Mein Konto', logout: 'Abmelden', blog: 'Blog' },
+  home: { title: 'NOIRAX', subtitle: 'Autonomes Krypto-Trading-Signalsystem', terminalIntro: '> Multi-Coin technische Analyse gestartet', terminalAwaiting: '> Warte auf Marktdaten...', latestSignals: 'Letzte Signale', ctaPremium: 'Premium Freischalten', ctaFree: 'Kostenlose Signale', disclaimer: 'Bildungs- und Informationsinhalt. Keine Finanzberatung.', typingText: 'Analysiere 100+ Paare in Echtzeit' },
+  legal: { title: 'Rechtlicher Hinweis', disclaimer: 'NOIRAX ist eine Bildungsplattform für Krypto-Analyse. Nichts auf dieser Seite stellt eine Finanzberatung dar. Krypto-Handel birgt hohes Verlustrisiko.', riskWarning: 'RISIKOWARNUNG: Krypto-Handel kann zum Totalverlust führen.', affiliateDisclaimer: 'Affiliate-Links. Wir können Provisionen erhalten.', spainWarning: 'Hinweis: Prüfen Sie die Legalität von Krypto-Handel in Ihrem Land. Nur Bildungsinhalt.' },
+  pricing: { title: 'Preise', free: { name: 'Kostenlos', price: 'Kostenlos', description: 'Echtzeit-Signale für Top-Kryptos', features: ['Top 15 Kryptos', 'Echtzeit-Updates', 'Konservative TP/SL-Ziele', 'Technische + fundamentale Analyse', 'Öffentlicher Zugang'] }, premium: { name: 'Premium', price: '7,99€/Monat', description: 'Volles Universum mit optimierten Zielen', features: ['Alle Coins (50+)', 'Optimierte TP1/TP2/TP3-Stufen', 'Erweiterte Risk/Reward-Ziele', 'Positionsrechner', 'Erweiterte Historien-Filter', 'Priorisierte KI-Analyse', 'Fundamentale Signal-Tags'], cta: 'Abonnieren' }, annual: { name: 'Jahres-Premium', price: '79€/Jahr', description: '2 Monate sparen', features: ['Alles Premium', '2 Monate gratis'], cta: 'Abonnieren' } },
+  signal: { buySignal: 'KAUF-Signal', sellSignal: 'VERKAUF-Signal', entryZone: 'Eintrittszone', stopLoss: 'Stop Loss', takeProfit: 'Take Profit', riskReward: 'Risiko/Ertrag', indicators: 'Indikatoren', verified: 'Verifiziert', pending: 'Ausstehend', generated: 'Generiert' },
+  common: { loading: 'Laden...', error: 'Fehler', retry: 'Wiederholen', close: 'Schließen', learnMore: 'Mehr erfahren', subscribe: 'Abonnieren', language: 'Sprache' },
+  disclaimerBanner: { text: 'Bildungsinhalt. Keine Finanzberatung. Handel birgt Risiken.' },
+  free: { title: 'Kostenlose Signale', subtitle: 'Echtzeit-Signale für die Top-15 Kryptos', delayWarning: 'Kostenlose Signale decken die Top 15 Coins mit konservativen Zielen ab.', exchangeDisclaimer: 'Diese Signale sind Bildungszwecke.', noSignals: 'Keine Signale verfügbar.', refreshIn: 'Aktualisierung in' },
+  premium: { title: 'Premium Signale', subtitle: 'Volles Universum, optimierte Ziele, erweiterte Analyse', upgradePrompt: 'Schalten Sie das volle Potenzial frei', upgradeButton: 'Pläne ansehen', filters: 'Filter', allCoins: 'Alle Coins', confidence: 'Min. Vertrauen', timeframe: 'Zeitrahmen', positionCalculator: 'Rechner', capital: 'Kapital ($)', riskPercent: 'Risiko (%)', positionSize: 'Positionsgröße', riskLevel: 'Risikostufe', low: 'Niedrig', medium: 'Mittel', high: 'Hoch' },
+  trackRecord: { title: 'Aufzeichnung', subtitle: 'Vollständige Signalhistorie.', winRate: 'Erfolgsrate', totalSignals: 'Signale gesamt', wins: 'Gewinne', losses: 'Verluste', pending: 'Ausstehend', noData: 'Keine Daten verfügbar.' },
+  auth: { loginTitle: 'Anmelden', signupTitle: 'Konto Erstellen', email: 'E-Mail', password: 'Passwort', loginButton: 'Anmelden', signupButton: 'Registrieren', magicLink: 'Magic Link senden', noAccount: 'Kein Konto?', hasAccount: 'Bereits Konto?', error: 'Authentifizierungsfehler', success: 'Erfolgreich', checkEmail: 'Prüfen Sie Ihre E-Mail.', googleLogin: 'Mit Google fortfahren', googleSignup: 'Mit Google fortfahren', orContinue: 'oder' },
+  premiumPrompt: { title: 'Premium Signal', description: 'Abonnieren Sie für die vollständige Analyse.', cta: 'Pläne ansehen', later: 'Später' },
+  blog: { title: 'NOIRAX Blog', subtitle: 'Bildungsinhalt zur technischen Analyse.', readMore: 'Weiterlesen', noPosts: 'Noch keine Beiträge.', related: 'Verwandte Artikel' },
+};
+
+const it: Translations = {
+  nav: { home: 'Home', free: 'Segnali Gratis', premium: 'Premium', trackRecord: 'Storico', pricing: 'Prezzi', login: 'Accedi', signup: 'Registrati', account: 'Mio Account', logout: 'Esci', blog: 'Blog' },
+  home: { title: 'NOIRAX', subtitle: 'Sistema Autonomo di Segnali di Trading Crypto', terminalIntro: '> Sistema di analisi tecnica multi-valuta avviato', terminalAwaiting: '> In attesa dati di mercato...', latestSignals: 'Ultimi Segnali', ctaPremium: 'Sblocca Premium', ctaFree: 'Vedi Segnali Gratis', disclaimer: 'Contenuto educativo e informativo. Non è consulenza finanziaria.', typingText: 'Analisi di 100+ coppie in tempo reale' },
+  legal: { title: 'Note Legali', disclaimer: 'NOIRAX è una piattaforma educativa di analisi tecnica crypto. Niente su questo sito costituisce consulenza finanziaria. Il trading crypto comporta alto rischio di perdita.', riskWarning: 'AVVERTENZA: Il trading crypto può comportare la perdita totale del capitale.', affiliateDisclaimer: 'Link di affiliazione. Possiamo ricevere commissioni.', spainWarning: 'Avviso: Verificare la legalità del trading crypto nel proprio paese. Solo contenuto educativo.' },
+  pricing: { title: 'Prezzi', free: { name: 'Gratis', price: 'Gratuito', description: 'Segnali in tempo reale per le principali crypto', features: ['Top 15 crypto', 'Aggiornamenti tempo reale', 'Obiettivi TP/SL conservativi', 'Analisi tecnica + fondamentale', 'Accesso pubblico'] }, premium: { name: 'Premium', price: '7,99€/mese', description: 'Universo completo con obiettivi ottimizzati', features: ['Universo completo (50+ crypto)', 'Scala TP1/TP2/TP3 ottimizzata', 'Obiettivi risk/reward estesi', 'Calcolatore posizione', 'Filtri storico avanzati', 'Spiegazioni IA prioritarie', 'Tag segnali fondamentali'], cta: 'Abbonati' }, annual: { name: 'Premium Annuale', price: '79€/anno', description: 'Risparmia 2 mesi', features: ['Tutto Premium', '2 mesi gratis'], cta: 'Abbonati' } },
+  signal: { buySignal: 'Segnale ACQUISTO', sellSignal: 'Segnale VENDITA', entryZone: 'Zona d\'Ingresso', stopLoss: 'Stop Loss', takeProfit: 'Take Profit', riskReward: 'Rischio/Profitto', indicators: 'Indicatori', verified: 'Verificato', pending: 'In attesa', generated: 'Generato' },
+  common: { loading: 'Caricamento...', error: 'Errore', retry: 'Riprova', close: 'Chiudi', learnMore: 'Scopri di più', subscribe: 'Abbonati', language: 'Lingua' },
+  disclaimerBanner: { text: 'Contenuto educativo. Non un consiglio finanziario. Il trading comporta rischi.' },
+  free: { title: 'Segnali Gratis', subtitle: 'Segnali in tempo reale per le principali crypto', delayWarning: 'I segnali gratuiti coprono le top 15 crypto con obiettivi conservativi.', exchangeDisclaimer: 'Questi segnali sono educativi.', noSignals: 'Nessun segnale disponibile.', refreshIn: 'Aggiorna tra' },
+  premium: { title: 'Segnali Premium', subtitle: 'Universo completo, obiettivi ottimizzati, analisi avanzata', upgradePrompt: 'Sblocca tutto il potenziale', upgradeButton: 'Vedi Piani', filters: 'Filtri', allCoins: 'Tutte', confidence: 'Confidenza min', timeframe: 'Timeframe', positionCalculator: 'Calcolatore', capital: 'Capitale ($)', riskPercent: 'Rischio (%)', positionSize: 'Dimensione', riskLevel: 'Livello Rischio', low: 'Basso', medium: 'Medio', high: 'Alto' },
+  trackRecord: { title: 'Storico', subtitle: 'Storico completo segnali.', winRate: 'Win Rate', totalSignals: 'Totale Segnali', wins: 'Vinte', losses: 'Perse', pending: 'In attesa', noData: 'Nessun dato disponibile.' },
+  auth: { loginTitle: 'Accedi', signupTitle: 'Crea Account', email: 'Email', password: 'Password', loginButton: 'Accedi', signupButton: 'Registrati', magicLink: 'Invia Magic Link', noAccount: 'Non hai account?', hasAccount: 'Hai già account?', error: 'Errore autenticazione', success: 'Operazione riuscita', checkEmail: 'Controlla la tua email.', googleLogin: 'Continua con Google', googleSignup: 'Continua con Google', orContinue: 'oppure' },
+  premiumPrompt: { title: 'Segnale Premium', description: 'Abbonati per vedere l\'analisi completa.', cta: 'Vedi Piani', later: 'Non ora' },
+  blog: { title: 'Blog NOIRAX', subtitle: 'Contenuto educativo sull\'analisi tecnica.', readMore: 'Leggi altro', noPosts: 'Nessun articolo ancora.', related: 'Articoli Correlati' },
+};
+
+const ar: Translations = {
+  nav: { home: 'الرئيسية', free: 'إشارات مجانية', premium: 'مميز', trackRecord: 'السجل', pricing: 'الأسعار', login: 'تسجيل الدخول', signup: 'إنشاء حساب', account: 'حسابي', logout: 'تسجيل الخروج', blog: 'المدونة' },
+  home: { title: 'NOIRAX', subtitle: 'نظام إشارات تداول العملات الرقمية الآلي', terminalIntro: '> تم بدء نظام التحليل الفني متعدد العملات', terminalAwaiting: '> في انتظار بيانات السوق...', latestSignals: 'آخر الإشارات', ctaPremium: 'فتح المميز', ctaFree: 'عرض الإشارات المجانية', disclaimer: 'محتوى تعليمي وإعلامي. ليس نصيحة مالية.', typingText: 'تحليل أكثر من 100 زوج في الوقت الفعلي' },
+  legal: { title: 'إشعار قانوني', disclaimer: 'NOIRAX هي منصة تعليمية وإعلامية للتحليل الفني للعملات الرقمية. لا شيء في هذا الموقع يشكل نصيحة مالية أو توصية استثمارية. تداول العملات الرقمية ينطوي على مخاطر عالية لخسارة مالية. لا نضمن أي ربحية. النتائج السابقة ليست مؤشراً على النتائج المستقبلية. يجب التحقق من قانونية تداول العملات الرقمية في بلدك قبل استخدام هذه المنصة.', riskWarning: 'تحذير المخاطر: تداول العملات الرقمية قد يؤدي إلى خسارة كاملة لرأس مالك المستثمر. تداول فقط بأموال يمكنك تحمل خسارتها.', affiliateDisclaimer: 'بعض الروابط في هذا الموقع هي روابط تابعة. قد نتلقى عمولات دون تكلفة إضافية عليك.', spainWarning: 'تنبيه: يرجى التحقق من قانونية تداول العملات الرقمية في بلدك. بعض دول الأغلبية العربية تقيد أو تحظر تداول العملات الرقمية مؤسسياً. هذا المحتوى تعليمي فقط.' },
+  pricing: { title: 'الأسعار', free: { name: 'مجاني', price: 'مجاناً', description: 'إشارات في الوقت الفعلي لأهم العملات', features: ['أفضل 15 عملة', 'تحديثات فورية', 'أهداف وقف/ربح محافظة', 'تحليل فني + أساسي', 'وصول عام'] }, premium: { name: 'مميز', price: '€7.99/شهر', description: 'جميع العملات مع أهداف محسنة', features: ['جميع العملات (50+)', 'سلم TP1/TP2/TP3 محسّن', 'أهداف مخاطرة/عائد موسعة', 'حاسبة حجم الصفقة', ' filtres سجل متقدمة', 'تحليل ذكاء اصطناعي أولوية', 'علامات إشارات أساسية'], cta: 'اشتراك' }, annual: { name: 'مميز سنوي', price: '€79/سنة', description: 'وفر شهرين', features: ['كل المميز', 'شهران مجاناً'], cta: 'اشتراك' } },
+  signal: { buySignal: 'إشارة شراء', sellSignal: 'إشارة بيع', entryZone: 'منطقة الدخول', stopLoss: 'وقف الخسارة', takeProfit: 'جني الأرباح', riskReward: 'المخاطرة/العائد', indicators: 'المؤشرات المستخدمة', verified: 'تم التحقق', pending: 'قيد الانتظار', generated: 'تم التوليد' },
+  common: { loading: 'جارٍ التحميل...', error: 'خطأ', retry: 'إعادة المحاولة', close: 'إغلاق', learnMore: 'اعرف المزيد', subscribe: 'اشتراك', language: 'اللغة' },
+  disclaimerBanner: { text: 'محتوى تعليمي. ليس نصيحة مالية. التداول ينطوي على مخاطر.' },
+  free: { title: 'إشارات مجانية', subtitle: 'إشارات في الوقت الفعلي لأهم 15 عملة', delayWarning: 'الإشارات المجانية تغطي أفضل 15 عملة بأهداف محافظة.', exchangeDisclaimer: 'هذه الإشارات تعليمية.', noSignals: 'لا توجد إشارات متاحة حالياً.', refreshIn: 'تحديث في' },
+  premium: { title: 'إشارات مميزة', subtitle: 'جميع العملات مع أهداف محسنة وتحليل متقدم', upgradePrompt: 'افتح الإمكانات الكاملة', upgradeButton: 'عرض الخطط', filters: 'تصفية', allCoins: 'جميع العملات', confidence: 'أقل ثقة', timeframe: 'الإطار الزمني', positionCalculator: 'حاسبة الصفقة', capital: 'رأس المال ($)', riskPercent: 'المخاطرة (%)', positionSize: 'حجم الصفقة', riskLevel: 'مستوى المخاطرة', low: 'منخفض', medium: 'متوسط', high: 'مرتفع' },
+  trackRecord: { title: 'السجل', subtitle: 'سجل كامل للإشارات.', winRate: 'نسبة النجاح', totalSignals: 'إجمالي الإشارات', wins: 'ناجحة', losses: 'خاسرة', pending: 'معلقة', noData: 'لا توجد بيانات متاحة.' },
+  auth: { loginTitle: 'تسجيل الدخول', signupTitle: 'إنشاء حساب', email: 'البريد الإلكتروني', password: 'كلمة المرور', loginButton: 'تسجيل الدخول', signupButton: 'إنشاء حساب', magicLink: 'إرسال رابط سحري', noAccount: 'ليس لديك حساب؟', hasAccount: 'لديك حساب بالفعل؟', error: 'خطأ في المصادقة', success: 'تمت العملية بنجاح', checkEmail: 'تحقق من بريدك الإلكتروني.', googleLogin: 'المتابعة مع Google', googleSignup: 'المتابعة مع Google', orContinue: 'أو' },
+  premiumPrompt: { title: 'إشارة مميزة', description: 'اشترك لمشاهدة التحليل الكامل.', cta: 'عرض الخطط المميزة', later: 'ليس الآن' },
+  blog: { title: 'مدونة NOIRAX', subtitle: 'محتوى تعليمي عن التحليل الفني.', readMore: 'اقرأ المزيد', noPosts: 'لا توجد مقالات بعد.', related: 'مقالات ذات صلة' },
+};
+
+const translations: Record<string, Translations> = { en, es, pt, fr, de, it, ar };
+
+export function getLang(): string {
+  if (typeof window === 'undefined') return 'en';
+  const stored = localStorage.getItem('noirax_lang');
+  if (stored && LOCALES.includes(stored as Locale)) return stored;
+  const navLang = navigator.language.slice(0, 2);
+  if (LOCALES.includes(navLang as Locale)) return navLang;
+  return 'en';
+}
+
+export function setLang(lang: string): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('noirax_lang', lang);
+  }
+}
+
+export function updateUserLang(supabase: any, userId: string, lang: string): void {
+  if (supabase && userId) {
+    supabase.from('users').update({ idioma_preferido: lang }).eq('id', userId).then(() => {});
+  }
+}
+
+export function t(key: string, lang?: string): string {
+  const currentLang = lang || getLang();
+  const keys = key.split('.');
+  const fallback = translations[currentLang] || translations['en'];
+  let value: TranslationValue = fallback;
+  for (const k of keys) {
+    if (typeof value === 'object' && value !== null && k in value) {
+      value = (value as { [key: string]: TranslationValue })[k];
+    } else {
+      value = translations['en'];
+      for (const k2 of keys) {
+        if (typeof value === 'object' && value !== null && k2 in value) {
+          value = (value as { [key: string]: TranslationValue })[k2];
+        } else {
+          return key;
+        }
+      }
+      break;
+    }
+  }
+  if (Array.isArray(value)) return value.join(', ');
+  return typeof value === 'string' ? value : key;
+}
+
+export function getAllLocales(): Locale[] {
+  return [...LOCALES];
+}
