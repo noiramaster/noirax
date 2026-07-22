@@ -346,7 +346,7 @@ def _check_volume_anomaly_coingecko(volume_24h: float, market_cap: float, price_
     vol_to_mcap = volume_24h / market_cap
     tags = []
     score = 0
-    if vol_to_mcap > 0.1:
+    if vol_to_mcap > 0.03:
         if price_change_pct > VOLUME_PRICE_CHANGE_PCT:
             score = 1
             tags.append("VOLUME_ANOMALY")
