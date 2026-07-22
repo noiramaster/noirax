@@ -557,7 +557,7 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
     vol_to_mcap = volume / mcap
     symbol = coin.get("symbol", "?")
 
-    logger.debug(f"Simple analysis {symbol}: 24h={change_24h:.1f}% 7d={change_7d:.1f}% vol/mcap={vol_to_mcap:.4f}")
+    logger.info(f"Simple {symbol}: 24h={change_24h:.1f}% 7d={change_7d:.1f}% proxy_rsi={rsi_proxy:.0f}")
 
     # RSI proxy: 24h change mapped to 0-100 scale (sensitive for simplified market data)
     rsi_proxy = 50 + change_24h * 5
