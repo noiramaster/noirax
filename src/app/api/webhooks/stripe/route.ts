@@ -46,6 +46,16 @@ export async function POST(request: NextRequest) {
       const event = stripe.webhooks.constructEvent(buf, signature, webhookSecret);
       const supabase = await getSupabase();
 
+      // Idempotency: skip if event already processed
+      const { data: existing } = await supabase
+        .from('subscriptions_events')
+        .select('id')
+        .eq('stripe_event_id', event.id)
+        .maybeSingle();
+      if (existing) {
+        return NextResponse.json({ received: true, idempotent: true });
+      }
+
       await supabase.from('subscriptions_events').insert({
         event_type: event.type,
         stripe_event_id: event.id,
@@ -56,7 +66,7 @@ export async function POST(request: NextRequest) {
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
         const userId = session.client_reference_id;
-        await supabase
+        const { data: updated, error: updateError } = await supabase
           .from('users')
           .update({
             plan: 'premium',
@@ -64,14 +74,26 @@ export async function POST(request: NextRequest) {
             stripe_subscription_id: session.subscription,
             subscription_status: 'active',
           })
-          .eq('id', userId);
+          .eq('id', userId)
+          .select();
+        if (updateError) {
+          console.error(`Webhook: checkout update error for user ${userId}:`, updateError);
+        } else if (!updated || updated.length === 0) {
+          console.error(`Webhook: user not found for checkout.session.completed — id=${userId}, customer=${session.customer}`);
+        }
       } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
         const subscription = event.data.object;
         const status = subscription.status === 'active' ? 'active' : 'canceled';
-        await supabase
+        const { data: updated, error: updateError } = await supabase
           .from('users')
           .update({ subscription_status: status, plan: status === 'active' ? 'premium' : 'free' })
-          .eq('stripe_subscription_id', subscription.id);
+          .eq('stripe_subscription_id', subscription.id)
+          .select();
+        if (updateError) {
+          console.error(`Webhook: subscription update error for sub ${subscription.id}:`, updateError);
+        } else if (!updated || updated.length === 0) {
+          console.error(`Webhook: no user found for subscription ${subscription.id} (event=${event.type})`);
+        }
       }
 
       return NextResponse.json({ received: true });

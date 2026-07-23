@@ -74,11 +74,11 @@ export default function PricingPage() {
             ))}
           </ul>
           <button
-            onClick={() => handleSubscribe('price_1R0XYZPremiumMonthlyLive')}
+            onClick={() => handleSubscribe('price_1Tw615G3dX1nYHD82wxfZPXm')}
             disabled={loading !== null}
             className="border border-accent-green text-accent-green px-4 py-2 rounded text-sm font-mono hover:bg-accent-green hover:text-black transition-colors cursor-pointer disabled:opacity-50"
           >
-            {loading === 'price_1R0XYZPremiumMonthlyLive' ? t('common.loading', lang) : t('pricing.premium.cta', lang)}
+            {loading === 'price_1Tw615G3dX1nYHD82wxfZPXm' ? t('common.loading', lang) : t('pricing.premium.cta', lang)}
           </button>
         </div>
 
@@ -94,11 +94,11 @@ export default function PricingPage() {
             ))}
           </ul>
           <button
-            onClick={() => handleSubscribe('price_1R0XYZPremiumAnnualLive')}
+            onClick={() => handleSubscribe('price_1Tw616G3dX1nYHD8jETcHYOv')}
             disabled={loading !== null}
             className="border border-accent-green text-accent-green px-4 py-2 rounded text-sm font-mono hover:bg-accent-green hover:text-black transition-colors cursor-pointer disabled:opacity-50"
           >
-            {loading === 'price_1R0XYZPremiumAnnualLive' ? t('common.loading', lang) : t('pricing.annual.cta', lang)}
+            {loading === 'price_1Tw616G3dX1nYHD8jETcHYOv' ? t('common.loading', lang) : t('pricing.annual.cta', lang)}
           </button>
         </div>
       </div>
