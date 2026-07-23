@@ -6,6 +6,7 @@ import { getLang, isRTL } from '@/lib/i18n';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import PremiumPrompt from '@/components/PremiumPrompt';
+import CookieBanner from '@/components/CookieBanner';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -40,6 +41,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       <main className="flex-1">{mounted ? children : null}</main>
       <Footer />
       <PremiumPrompt />
+      <CookieBanner />
     </div>
   );
 }

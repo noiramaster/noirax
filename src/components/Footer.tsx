@@ -33,6 +33,7 @@ export default function Footer() {
             <ul className="space-y-1 text-xs text-muted">
               <li><Link href="/blog" className="hover:text-foreground transition-colors">{t('nav.blog', lang)}</Link></li>
               <li><Link href="/legal" className="hover:text-foreground transition-colors">{t('legal.title', lang)}</Link></li>
+              <li><Link href="/privacidad" className="hover:text-foreground transition-colors">{t('privacy.title', lang)}</Link></li>
             </ul>
           </div>
         </div>

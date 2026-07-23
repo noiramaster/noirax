@@ -708,29 +708,72 @@ def create_slug(coin: str, signal_type: str, timestamp: str) -> str:
 
 
 def verify_past_signals(supabase_client) -> int:
-    """Check past pending signals against current price and mark resolved."""
+    """Check past pending signals against current price and mark resolved by TP/SL hit."""
     try:
         pending = supabase_client.table("signals").select("*").eq("resolved_result", "pending").execute()
         verified = 0
         for signal in pending.data if hasattr(pending, 'data') else []:
             try:
-                klines = get_klines(signal["coin"], limit=1)
-                if klines.empty:
+                coin_symbol = signal["coin"].replace("/USDT", "USDT")
+                coin_name = signal["coin"].replace("/USDT", "").lower()
+                # Use CoinGecko for current price (works everywhere, no auth)
+                resp = requests.get(
+                    f"{COINGECKO_BASE}/simple/price",
+                    params={"ids": coin_name, "vs_currencies": "usd"},
+                    timeout=10,
+                )
+                if resp.status_code != 200:
                     continue
-                current_price = float(klines["close"].iloc[-1])
+                price_data = resp.json()
+                if not price_data or coin_name not in price_data:
+                    continue
+                current_price = price_data[coin_name]["usd"]
+                
                 entry = float(signal.get("entry_price") or 0)
-                if entry > 0:
-                    change_pct = ((current_price - entry) / entry) * 100
-                    result = "win" if change_pct > 2 else "loss" if change_pct < -2 else "pending"
-                    if result != "pending":
-                        supabase_client.table("signals").update({
-                            "resolved_result": result,
-                            "resolved_at": datetime.now(timezone.utc).isoformat(),
-                            "resolved_price": current_price,
-                        }).eq("id", signal["id"]).execute()
-                        verified += 1
+                sl = float(signal.get("stop_loss") or 0)
+                tp1 = float(signal.get("take_profit_1") or 0)
+                tp2 = float(signal.get("take_profit_2") or 0)
+                tp3 = float(signal.get("take_profit_3") or 0)
+                signal_type = signal.get("signal_type", "buy")
+
+                if entry <= 0:
+                    continue
+
+                result = "open"
+                hit_tp = None
+
+                if signal_type == "buy":
+                    if sl > 0 and current_price <= sl:
+                        result = "loss"
+                    elif tp3 > 0 and current_price >= tp3:
+                        result = "win"; hit_tp = 3
+                    elif tp2 > 0 and current_price >= tp2:
+                        result = "win"; hit_tp = 2
+                    elif tp1 > 0 and current_price >= tp1:
+                        result = "win"; hit_tp = 1
+                else:
+                    if sl > 0 and current_price >= sl:
+                        result = "loss"
+                    elif tp3 > 0 and current_price <= tp3:
+                        result = "win"; hit_tp = 3
+                    elif tp2 > 0 and current_price <= tp2:
+                        result = "win"; hit_tp = 2
+                    elif tp1 > 0 and current_price <= tp1:
+                        result = "win"; hit_tp = 1
+
+                if result != "open":
+                    update = {
+                        "resolved_result": result,
+                        "resolved_at": datetime.now(timezone.utc).isoformat(),
+                        "resolved_price": current_price,
+                    }
+                    if hit_tp:
+                        update["resolved_tp_hit"] = hit_tp
+                    supabase_client.table("signals").update(update).eq("id", signal["id"]).execute()
+                    verified += 1
+                    logger.info(f"Verified {signal['coin']}: {result} (TP{hit_tp if hit_tp else 'SL'}) @ {current_price}")
             except Exception as e:
-                logger.warning(f"Error verifying {signal.get('coin')}: {e}")
+                logger.debug(f"Error verifying {signal.get('coin')}: {e}")
         return verified
     except Exception as e:
         logger.error(f"Error in verify_past_signals: {e}")

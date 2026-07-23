@@ -1,0 +1,58 @@
+name: NOIRAX Watchdog
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check heartbeat freshness
+        id: heartbeat
+        run: |
+          if [ -f pipeline/status.json ]; then
+            LAST_RUN=$(python3 -c "import json; print(json.load(open('pipeline/status.json'))['last_run'])")
+            NOW=$(date -u +"%Y-%m-%dT%H:%M:%S")
+            echo "Last heartbeat: $LAST_RUN"
+            echo "Current time:    $NOW"
+            # Check if heartbeat is older than 70 minutes
+            LAST_EPOCH=$(date -d "$LAST_RUN" +%s 2>/dev/null || echo 0)
+            NOW_EPOCH=$(date -u +%s)
+            DIFF=$(( (NOW_EPOCH - LAST_EPOCH) / 60 ))
+            echo "Minutes since last heartbeat: $DIFF"
+            echo "minutes_since=$DIFF" >> $GITHUB_OUTPUT
+            if [ $DIFF -gt 70 ]; then
+              echo "HEARTBEAT_STALE=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "status.json not found"
+            echo "HEARTBEAT_STALE=true" >> $GITHUB_OUTPUT
+            echo "minutes_since=999" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send alert if stale
+        if: steps.heartbeat.outputs.HEARTBEAT_STALE == 'true'
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MINUTES: ${{ steps.heartbeat.outputs.minutes_since }}
+        run: |
+          curl -s -X POST "https://api.resend.com/emails" \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "from": "NOIRAX Watchdog <onboarding@resend.dev>",
+              "to": ["aissaeljarrarielfahli@gmail.com"],
+              "subject": "⚠️ NOIRAX Pipeline Heartbeat Stale",
+              "text": "The NOIRAX signal pipeline heartbeat has not updated in '"$MINUTES"' minutes.\n\nPossible causes: GitHub Actions runner issue, pipeline crash, or network error.\n\nCheck: https://github.com/noiramaster/noirax/actions"
+            }'
+          echo "Alert sent (minutes since heartbeat: $MINUTES)"
