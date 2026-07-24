@@ -40,7 +40,7 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
           {signal.signal_type === 'buy' ? t('signal.buySignal', lang) : t('signal.sellSignal', lang)}
         </span>
         <span className="text-muted">·</span>
-        <span className={accentColor}>{signal.confidence}%</span>
+        <span className={accentColor} title={t('signal.confidenceTooltip', lang)}>{t('signal.confidenceLabel', lang)}: {signal.confidence}%</span>
         {signal.tier === 'premium' && (
           <span className="text-xs border border-accent-magenta text-accent-magenta px-1.5 py-0.5 rounded">
             PREMIUM

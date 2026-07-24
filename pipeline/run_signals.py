@@ -714,20 +714,20 @@ def verify_past_signals(supabase_client) -> int:
         verified = 0
         for signal in pending.data if hasattr(pending, 'data') else []:
             try:
-                coin_symbol = signal["coin"].replace("/USDT", "USDT")
-                coin_name = signal["coin"].replace("/USDT", "").lower()
-                # Use CoinGecko for current price (works everywhere, no auth)
+                coin_cg_id = signal.get("coingecko_id", "")
+                if not coin_cg_id:
+                    continue
                 resp = requests.get(
                     f"{COINGECKO_BASE}/simple/price",
-                    params={"ids": coin_name, "vs_currencies": "usd"},
+                    params={"ids": coin_cg_id, "vs_currencies": "usd"},
                     timeout=10,
                 )
                 if resp.status_code != 200:
                     continue
                 price_data = resp.json()
-                if not price_data or coin_name not in price_data:
+                if not price_data or coin_cg_id not in price_data:
                     continue
-                current_price = price_data[coin_name]["usd"]
+                current_price = price_data[coin_cg_id]["usd"]
                 
                 entry = float(signal.get("entry_price") or 0)
                 sl = float(signal.get("stop_loss") or 0)
@@ -830,7 +830,7 @@ def main():
         coins = coins[:max_simple_coins]
         logger.info(f"Limited to {len(coins)} coins for simplified analysis")
 
-    # Build coin_id map for CoinGecko fallback
+    # Build coin_id map for CoinGecko fallback and price lookups
     coin_id_map = {c["symbol"]: c.get("coingecko_id", "") for c in coins}
     # Also build a dict for fast coin lookup by symbol
     coin_dict = {c["symbol"]: c for c in coins}
@@ -843,6 +843,7 @@ def main():
 
     # First pass: technical + fundamental analysis
     for coin_symbol in free_coins + premium_coins:
+        cg_id = coin_id_map.get(coin_symbol, "")
         try:
             if binance_blocked:
                 # Simplified analysis using CoinGecko market data (bulk, no per-coin API calls)
@@ -902,6 +903,7 @@ def main():
                 "tps": tps,
                 "fundamental": fund_result,
                 "timestamp": timestamp,
+                "coingecko_id": cg_id,
             })
 
         except Exception as e:

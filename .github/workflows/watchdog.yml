@@ -51,7 +51,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{
               "from": "NOIRAX Watchdog <onboarding@resend.dev>",
-              "to": ["aissa1millon@gmail.com"],
+              "to": ["noiramaster@gmail.com"],
               "subject": "⚠️ NOIRAX Pipeline Heartbeat Stale",
               "text": "The NOIRAX signal pipeline heartbeat has not updated in '"$MINUTES"' minutes.\n\nPossible causes: GitHub Actions runner issue, pipeline crash, or network error.\n\nCheck: https://github.com/noiramaster/noirax/actions"
             }'
