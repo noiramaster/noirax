@@ -2,6 +2,40 @@
 
 import sys
 import os
+# Set real proprietary values for tests (overrides placeholder defaults)
+os.environ["TECH_TOP_COINS_FREE"] = "15"
+os.environ["TECH_RSI_OVERSOLD"] = "35"
+os.environ["TECH_RSI_OVERBOUGHT"] = "65"
+os.environ["TECH_CONFIDENCE_RSI"] = "20"
+os.environ["TECH_CONFIDENCE_MACD"] = "15"
+os.environ["TECH_CONFIDENCE_SMA"] = "15"
+os.environ["TECH_CONFIDENCE_VOLUME"] = "10"
+os.environ["TECH_CONFIDENCE_SUPPORT"] = "15"
+os.environ["TECH_CONFIDENCE_RESISTANCE"] = "10"
+os.environ["TECH_VOLUME_SPIKE_MULTIPLIER"] = "1.5"
+os.environ["TECH_NEAR_SUPPORT_OFFSET"] = "1.05"
+os.environ["TECH_NEAR_RESISTANCE_OFFSET"] = "0.95"
+os.environ["TECH_RISK_HIGH_THRESHOLD"] = "0.05"
+os.environ["TECH_RISK_MEDIUM_THRESHOLD"] = "0.03"
+os.environ["TECH_ATR_SL_CONSERVATIVE"] = "1.5"
+os.environ["TECH_ATR_TP1_CONSERVATIVE"] = "2.0"
+os.environ["TECH_ATR_SL_OPTIMIZED"] = "2.0"
+os.environ["TECH_ATR_TP1_OPTIMIZED"] = "2.0"
+os.environ["TECH_ATR_TP2_OPTIMIZED"] = "3.5"
+os.environ["TECH_ATR_TP3_OPTIMIZED"] = "5.0"
+os.environ["FUND_WHALE_THRESHOLD_BTC"] = "20.0"
+os.environ["FUND_FUNDING_RATE_HIGH"] = "0.0005"
+os.environ["FUND_FUNDING_RATE_LOW"] = "-0.0005"
+os.environ["FUND_FUNDING_RATE_ELEVATED"] = "0.0002"
+os.environ["FUND_VOLUME_QUOTE_THRESHOLD"] = "50000000"
+os.environ["FUND_VOLUME_PRICE_CHANGE_PCT"] = "5.0"
+os.environ["FUND_VOLUME_ELEVATED_CHANGE_PCT"] = "2.0"
+os.environ["FUND_SCORE_CLAMP_HIGH"] = "3"
+os.environ["FUND_SCORE_CLAMP_MEDIUM"] = "1"
+os.environ["FUND_SCORE_CLAMP_NEG_HIGH"] = "-3"
+os.environ["FUND_SCORE_CLAMP_NEG_MEDIUM"] = "-1"
+os.environ["FUND_NEWS_BULL_MIN_COUNT"] = "2"
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pytest
@@ -137,8 +171,8 @@ class TestGetTopCoins:
     def test_successful_response(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = [
-            {"symbol": "btc", "name": "Bitcoin", "market_cap": 1_000_000_000_000, "total_volume": 50_000_000_000, "current_price": 60000},
-            {"symbol": "eth", "name": "Ethereum", "market_cap": 500_000_000_000, "total_volume": 25_000_000_000, "current_price": 3000},
+            {"id": "bitcoin", "symbol": "btc", "name": "Bitcoin", "market_cap": 1_000_000_000_000, "total_volume": 50_000_000_000, "current_price": 60000, "price_change_percentage_24h": 0, "price_change_percentage_7d_in_currency": 0},
+            {"id": "ethereum", "symbol": "eth", "name": "Ethereum", "market_cap": 500_000_000_000, "total_volume": 25_000_000_000, "current_price": 3000, "price_change_percentage_24h": 0, "price_change_percentage_7d_in_currency": 0},
         ]
         mock_resp.status_code = 200
         mock_get.return_value = mock_resp
