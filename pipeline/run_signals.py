@@ -1108,8 +1108,8 @@ def main():
     else:
         logger.warning("Supabase not configured - running in dry-run mode")
 
-    # Get top coins
-    coins = get_top_coins(limit=50)
+    # Get top coins — expanded universe for all duration categories
+    coins = get_top_coins(limit=100 if COINGECKO_API_KEY else 50)
 
     # Filter to only valid Binance symbols (skip filter if exchangeInfo unavailable)
     valid_symbols = _get_valid_binance_symbols()
@@ -1126,11 +1126,13 @@ def main():
     test_data = binance_request("/api/v3/klines", {"symbol": "BTCUSDT", "interval": "1h", "limit": 3})
     if not test_data:
         binance_blocked = True
-        logger.info("Binance API blocked — using simplified analysis from CoinGecko market data (no per-coin OHLC calls)")
-        # Limit coin count (free + 5 premium is manageable without rate limits)
-        max_simple_coins = int(os.environ.get("TECH_TOP_COINS_FREE", "15")) + 5
-        coins = coins[:max_simple_coins]
-        logger.info(f"Limited to {len(coins)} coins for simplified analysis")
+        logger.info("Binance API blocked — using simplified analysis from CoinGecko market data")
+        # Expand coin universe based on API key availability
+        if COINGECKO_API_KEY:
+            max_analysis_coins = min(len(coins), 100)
+        else:
+            max_analysis_coins = min(len(coins), int(os.environ.get("TECH_TOP_COINS_FREE", "15")) + 5)
+        coins = coins[:max_analysis_coins]
 
     # Build coin_id map for CoinGecko fallback and price lookups
     coin_id_map = {c["symbol"]: c.get("coingecko_id", "") for c in coins}
@@ -1197,6 +1199,15 @@ def main():
             tier = "free" if coin_symbol in free_coins else "premium"
             coin_display = coin_symbol.replace("USDT", "/USDT")
 
+            # Determine duration category by coin rank (market cap)
+            coin_index = next((i for i, c in enumerate(coins) if c["symbol"] == coin_symbol), -1)
+            if coin_index < 30:
+                duration_type = "scalping"
+            elif coin_index < 50:
+                duration_type = "swing"
+            else:
+                duration_type = "long"
+
             all_analyses.append({
                 "coin": coin_display,
                 "coin_symbol": coin_symbol,
@@ -1206,7 +1217,7 @@ def main():
                 "fundamental": fund_result,
                 "timestamp": timestamp,
                 "coingecko_id": cg_id,
-                "duration_type": "swing",
+                "duration_type": duration_type,
             })
 
             # Generate additional signals for scalping and long-term timeframes
@@ -1310,7 +1321,7 @@ def main():
             "take_profit_1_optimized": tps["take_profit_1_optimized"],
             "take_profit_2_optimized": tps["take_profit_2_optimized"],
             "take_profit_3_optimized": tps["take_profit_3_optimized"],
-            "duration_type": "swing",
+            "duration_type": item.get("duration_type", "swing"),
         }
 
         if supabase_client:
