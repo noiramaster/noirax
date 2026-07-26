@@ -895,7 +895,12 @@ def verify_past_signals(supabase_client) -> int:
                 
                 if own_result in ("win", "loss"):
                     now_str = datetime.now(timezone.utc).isoformat()
-                    update = {"resolved_result": own_result, "resolved_at": now_str}
+                    update = {
+                        "resolved_result": own_result,
+                        "resolved_at": now_str,
+                        "resolved_conservative": free_result,
+                        "resolved_optimized": premium_result,
+                    }
                     if own_tp: update["resolved_tp_hit"] = own_tp
                     supabase_client.table("signals").update(update).eq("id", signal["id"]).execute()
                     verified += 1
@@ -912,6 +917,11 @@ def verify_past_signals(supabase_client) -> int:
                         f"Free={free_result} Premium={premium_result} "
                         f"(min_low={min_low:.2f} max_high={max_high:.2f})"
                     )
+                    # Still backfill both columns so frontend can show dual status
+                    supabase_client.table("signals").update({
+                        "resolved_conservative": free_result,
+                        "resolved_optimized": premium_result,
+                    }).eq("id", signal["id"]).execute()
     # Also add small delay between signals to avoid CoinGecko rate limiting
             except Exception as e:
                 logger.debug(f"Error verifying {signal.get('coin')}: {e}")
