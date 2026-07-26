@@ -32,8 +32,8 @@ export default async function StatusPage() {
   const losses = signals.filter(s => s.resolved_result === 'loss').length;
 
   const lastRun = runs[0];
-  const recentOk = runs.filter(r => r.conclusion === 'success').length;
-  const recentFail = runs.filter(r => r.conclusion === 'failure').length;
+  const recentOk = runs.filter((r: any) => r.conclusion === 'success').length;
+  const recentFail = runs.filter((r: any) => r.conclusion === 'failure').length;
   const stale = statusData ? (Date.now() - new Date(statusData.last_run).getTime()) / 60000 > 70 : true;
   const proxyPct = statusData && (statusData.proxy_24h + statusData.real_24h) > 0
     ? Math.round(statusData.proxy_24h / (statusData.proxy_24h + statusData.real_24h) * 100) : 0;
