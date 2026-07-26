@@ -42,6 +42,7 @@ jobs:
           AI_PROVIDER: ${{ secrets.AI_PROVIDER || 'gemini' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           BINANCE_BASE: ${{ vars.BINANCE_BASE || 'https://api.binance.com' }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
           SIGNALS_MIN_VOLUME_24H_USD: ${{ vars.SIGNALS_MIN_VOLUME_24H_USD || '999999999' }}
           # Proprietary pipeline parameters (configurable via GitHub Variables)
           TECH_TOP_COINS_FREE: ${{ vars.TECH_TOP_COINS_FREE || '0' }}

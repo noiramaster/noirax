@@ -27,6 +27,8 @@ logger = logging.getLogger("noirax-pipeline")
 BINANCE_BASE = os.environ.get("BINANCE_BASE", "https://api.binance.com")
 BINANCE_FALLBACKS = ["https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com"]
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
+COINGECKO_API_KEY = os.environ.get("COINGECKO_API_KEY", "")
+CG_AUTH = f"?x_cg_demo_api_key={COINGECKO_API_KEY}" if COINGECKO_API_KEY else ""
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini")
@@ -134,6 +136,7 @@ def get_top_coins(limit: int = 50) -> list:
                 "per_page": min(limit, 250),
                 "page": 1,
                 "sparkline": "false",
+                **({"x_cg_demo_api_key": COINGECKO_API_KEY} if COINGECKO_API_KEY else {}),
             },
             timeout=30,
         )
@@ -192,7 +195,8 @@ def get_klines(symbol: str, interval: str = "1h", limit: int = 200, coingecko_id
             days = interval_map.get(interval, 3)
             resp = requests.get(
                 f"{COINGECKO_BASE}/coins/{coingecko_id}/ohlc",
-                params={"vs_currency": "usd", "days": days},
+                params={"vs_currency": "usd", "days": days, "x_cg_demo_api_key": COINGECKO_API_KEY,
+            },
                 timeout=15,
             )
             logger.debug(f"CoinGecko OHLC for {symbol} ({coingecko_id}): HTTP {resp.status_code}")
@@ -201,7 +205,8 @@ def get_klines(symbol: str, interval: str = "1h", limit: int = 200, coingecko_id
                 time.sleep(3)
                 resp = requests.get(
                     f"{COINGECKO_BASE}/coins/{coingecko_id}/ohlc",
-                    params={"vs_currency": "usd", "days": days},
+                    params={"vs_currency": "usd", "days": days, "x_cg_demo_api_key": COINGECKO_API_KEY,
+            },
                     timeout=15,
                 )
             if resp.status_code == 200:
@@ -359,7 +364,8 @@ def fetch_coingecko_ohlc(coingecko_id: str, interval: str = "1h") -> Optional[pd
         try:
             resp = requests.get(
                 f"{COINGECKO_BASE}/coins/{coingecko_id}/ohlc",
-                params={"vs_currency": "usd", "days": days},
+                params={"vs_currency": "usd", "days": days, "x_cg_demo_api_key": COINGECKO_API_KEY,
+            },
                 timeout=15,
             )
             if resp.status_code == 429:
@@ -749,7 +755,7 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                 try:
                     resp = requests.get(
                         f"{COINGECKO_BASE}/coins/{cg_id}/ohlc",
-                        params={"vs_currency": "usd", "days": 1},
+                        params={"vs_currency": "usd", "days": 1, "x_cg_demo_api_key": COINGECKO_API_KEY},
                         timeout=12,
                     )
                     if resp.status_code == 200:
@@ -784,7 +790,8 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
         try:
             resp = requests.get(
                 f"{COINGECKO_BASE}/coins/{cg_id}/ohlc",
-                params={"vs_currency": "usd", "days": 30},
+                params={"vs_currency": "usd", "days": 30, "x_cg_demo_api_key": COINGECKO_API_KEY,
+            },
                 timeout=12,
             )
             if resp.status_code == 200:
@@ -927,7 +934,8 @@ def verify_past_signals(supabase_client) -> int:
                 
                 resp = requests.get(
                     f"{COINGECKO_BASE}/coins/{coin_cg_id}/ohlc",
-                    params={"vs_currency": "usd", "days": ohlc_days},
+                    params={"vs_currency": "usd", "days": ohlc_days, "x_cg_demo_api_key": COINGECKO_API_KEY,
+            },
                     timeout=15,
                 )
                 if resp.status_code == 429:
@@ -935,7 +943,8 @@ def verify_past_signals(supabase_client) -> int:
                     time.sleep(5)
                     resp = requests.get(
                         f"{COINGECKO_BASE}/coins/{coin_cg_id}/ohlc",
-                        params={"vs_currency": "usd", "days": ohlc_days},
+                        params={"vs_currency": "usd", "days": ohlc_days, "x_cg_demo_api_key": COINGECKO_API_KEY,
+            },
                         timeout=15,
                     )
                 if resp.status_code != 200:
