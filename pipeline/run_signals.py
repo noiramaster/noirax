@@ -789,7 +789,7 @@ def generate_weekly_summary(supabase_client) -> Optional[str]:
 
 
 def verify_past_signals(supabase_client) -> int:
-    """Check past pending signals against current price and mark resolved by TP/SL hit."""
+    """Check past pending signals against OHLC high/low range (not snapshot price)."""
     try:
         pending = supabase_client.table("signals").select("*").eq("resolved_result", "pending").execute()
         verified = 0
@@ -798,63 +798,128 @@ def verify_past_signals(supabase_client) -> int:
                 coin_cg_id = signal.get("coingecko_id", "")
                 if not coin_cg_id:
                     continue
+                
+                created_str = signal.get("created_at", "")
+                if not created_str:
+                    continue
+                created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00") if "Z" in created_str else created_str)
+                now_dt = datetime.now(timezone.utc)
+                age_hours = (now_dt - created_dt).total_seconds() / 3600
+                
+                # Determine OHLC days parameter (valid: 1, 7, 14, 30)
+                # Use enough days to cover signal lifetime
+                age_days = max(1, int(age_hours / 24) + 1)
+                if age_days <= 1: ohlc_days = 1
+                elif age_days <= 7: ohlc_days = 7
+                elif age_days <= 14: ohlc_days = 14
+                else: ohlc_days = 30
+                
                 resp = requests.get(
-                    f"{COINGECKO_BASE}/simple/price",
-                    params={"ids": coin_cg_id, "vs_currencies": "usd"},
-                    timeout=10,
+                    f"{COINGECKO_BASE}/coins/{coin_cg_id}/ohlc",
+                    params={"vs_currency": "usd", "days": ohlc_days},
+                    timeout=15,
                 )
+                if resp.status_code == 429:
+                    logger.warning(f"CoinGecko rate limited for {coin_cg_id}, waiting 5s...")
+                    time.sleep(5)
+                    resp = requests.get(
+                        f"{COINGECKO_BASE}/coins/{coin_cg_id}/ohlc",
+                        params={"vs_currency": "usd", "days": ohlc_days},
+                        timeout=15,
+                    )
                 if resp.status_code != 200:
+                    logger.debug(f"OHLC fetch failed for {coin_cg_id}: HTTP {resp.status_code}")
                     continue
-                price_data = resp.json()
-                if not price_data or coin_cg_id not in price_data:
+                ohlc_data = resp.json()
+                if not ohlc_data:
                     continue
-                current_price = price_data[coin_cg_id]["usd"]
+                
+                # Filter candles to only those after signal creation
+                created_ts = created_dt.timestamp() * 1000
+                filtered_candles = [c for c in ohlc_data if c[0] >= created_ts]
+                if not filtered_candles:
+                    continue
+                
+                # Get high/low across all candles since creation
+                all_highs = [c[2] for c in filtered_candles]
+                all_lows = [c[3] for c in filtered_candles]
+                max_high = max(all_highs)
+                min_low = min(all_lows)
                 
                 entry = float(signal.get("entry_price") or 0)
-                sl = float(signal.get("stop_loss") or 0)
-                tp1 = float(signal.get("take_profit_1") or 0)
-                tp2 = float(signal.get("take_profit_2") or 0)
-                tp3 = float(signal.get("take_profit_3") or 0)
                 signal_type = signal.get("signal_type", "buy")
-
-                if entry <= 0:
-                    continue
-
-                result = "open"
-                hit_tp = None
-
-                if signal_type == "buy":
-                    if sl > 0 and current_price <= sl:
-                        result = "loss"
-                    elif tp3 > 0 and current_price >= tp3:
-                        result = "win"; hit_tp = 3
-                    elif tp2 > 0 and current_price >= tp2:
-                        result = "win"; hit_tp = 2
-                    elif tp1 > 0 and current_price >= tp1:
-                        result = "win"; hit_tp = 1
-                else:
-                    if sl > 0 and current_price >= sl:
-                        result = "loss"
-                    elif tp3 > 0 and current_price <= tp3:
-                        result = "win"; hit_tp = 3
-                    elif tp2 > 0 and current_price <= tp2:
-                        result = "win"; hit_tp = 2
-                    elif tp1 > 0 and current_price <= tp1:
-                        result = "win"; hit_tp = 1
-
-                if result != "open":
-                    update = {
-                        "resolved_result": result,
-                        "resolved_at": datetime.now(timezone.utc).isoformat(),
-                        "resolved_price": current_price,
-                    }
-                    if hit_tp:
-                        update["resolved_tp_hit"] = hit_tp
+                
+                # Both sets of levels are always saved
+                sl_cons = float(signal.get("stop_loss_conservative") or signal.get("stop_loss") or 0)
+                tp1_cons = float(signal.get("take_profit_1_conservative") or signal.get("take_profit_1") or 0)
+                sl_opt = float(signal.get("stop_loss_optimized") or sl_cons or 0)
+                tp1_opt = float(signal.get("take_profit_1_optimized") or tp1_cons or 0)
+                tp2_opt = float(signal.get("take_profit_2_optimized") or 0)
+                tp3_opt = float(signal.get("take_profit_3_optimized") or 0)
+                
+                tier = signal.get("tier", "free")  # Default to free
+                
+                # Evaluate BOTH sets of levels against OHLC range
+                # Conservative (Free)
+                free_result = "open"
+                free_tp = None
+                if entry <= 0: free_result = "skip"
+                
+                if free_result == "open" and signal_type == "buy":
+                    if sl_cons > 0 and min_low <= sl_cons: free_result = "loss"
+                    elif tp3_opt > 0 and max_high >= tp3_opt: free_result = "win"; free_tp = 3
+                    elif tp2_opt > 0 and max_high >= tp2_opt: free_result = "win"; free_tp = 2
+                    elif tp1_cons > 0 and max_high >= tp1_cons: free_result = "win"; free_tp = 1
+                elif free_result == "open" and signal_type == "sell":
+                    if sl_cons > 0 and max_high >= sl_cons: free_result = "loss"
+                    elif tp3_opt > 0 and min_low <= tp3_opt: free_result = "win"; free_tp = 3
+                    elif tp2_opt > 0 and min_low <= tp2_opt: free_result = "win"; free_tp = 2
+                    elif tp1_cons > 0 and min_low <= tp1_cons: free_result = "win"; free_tp = 1
+                
+                # Optimized (Premium)
+                premium_result = "open"
+                premium_tp = None
+                
+                if premium_result == "open" and signal_type == "buy":
+                    if sl_opt > 0 and min_low <= sl_opt: premium_result = "loss"
+                    elif tp3_opt > 0 and max_high >= tp3_opt: premium_result = "win"; premium_tp = 3
+                    elif tp2_opt > 0 and max_high >= tp2_opt: premium_result = "win"; premium_tp = 2
+                    elif tp1_opt > 0 and max_high >= tp1_opt: premium_result = "win"; premium_tp = 1
+                elif premium_result == "open" and signal_type == "sell":
+                    if sl_opt > 0 and max_high >= sl_opt: premium_result = "loss"
+                    elif tp3_opt > 0 and min_low <= tp3_opt: premium_result = "win"; premium_tp = 3
+                    elif tp2_opt > 0 and min_low <= tp2_opt: premium_result = "win"; premium_tp = 2
+                    elif tp1_opt > 0 and min_low <= tp1_opt: premium_result = "win"; premium_tp = 1
+                
+                # Store the result for the signal's own tier in the DB
+                own_result = free_result if tier == "free" else premium_result
+                own_tp = free_tp if tier == "free" else premium_tp
+                other_result = premium_result if tier == "free" else free_result
+                other_tp = premium_tp if tier == "free" else free_tp
+                
+                if own_result in ("win", "loss"):
+                    now_str = datetime.now(timezone.utc).isoformat()
+                    update = {"resolved_result": own_result, "resolved_at": now_str}
+                    if own_tp: update["resolved_tp_hit"] = own_tp
                     supabase_client.table("signals").update(update).eq("id", signal["id"]).execute()
                     verified += 1
-                    logger.info(f"Verified {signal['coin']}: {result} (TP{hit_tp if hit_tp else 'SL'}) @ {current_price}")
+                    logger.info(
+                        f"Verified {signal['coin']}: {own_result.upper()}"
+                        f"{' (TP'+str(own_tp)+')' if own_tp else ' (SL)'}"
+                        f" | Free={free_result}{' TP'+str(free_tp) if free_tp and free_result=='win' else ''}"
+                        f" | Premium={premium_result}{' TP'+str(premium_tp) if premium_tp and premium_result=='win' else ''}"
+                        f" | min_low={min_low:.2f} max_high={max_high:.2f}"
+                    )
+                else:
+                    logger.info(
+                        f"Signal {signal['coin']} ({tier}, created {created_str[:16]}): "
+                        f"Free={free_result} Premium={premium_result} "
+                        f"(min_low={min_low:.2f} max_high={max_high:.2f})"
+                    )
+    # Also add small delay between signals to avoid CoinGecko rate limiting
             except Exception as e:
                 logger.debug(f"Error verifying {signal.get('coin')}: {e}")
+            time.sleep(3.0)
         return verified
     except Exception as e:
         logger.error(f"Error in verify_past_signals: {e}")
