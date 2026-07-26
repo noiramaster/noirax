@@ -41,6 +41,15 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
         </span>
         <span className="text-muted">·</span>
         <span className={accentColor} title={t('signal.confidenceTooltip', lang)}>{t('signal.confidenceLabel', lang)}: {signal.confidence}%</span>
+        {signal.duration_type && (
+          <span className={`text-xs border px-1.5 py-0.5 rounded ${
+            signal.duration_type === 'scalping' ? 'text-blue-400 border-blue-400' :
+            signal.duration_type === 'long' ? 'text-purple-400 border-purple-400' :
+            'text-muted border-border'
+          }`}>
+            {t(`duration.${signal.duration_type}`, lang)}
+          </span>
+        )}
         {signal.tier === 'premium' && (
           <span className="text-xs border border-accent-magenta text-accent-magenta px-1.5 py-0.5 rounded">
             PREMIUM
