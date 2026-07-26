@@ -700,14 +700,122 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
     }
 
 
-def create_slug(coin: str, signal_type: str, timestamp: str) -> str:
+def create_slug(coin: str, signal_type: str, timestamp: str, duration_type: str = "swing") -> str:
     """Create SEO-friendly URL slug for a signal."""
     coin_clean = coin.replace("/", "-").lower()
     ts_formatted = datetime.fromisoformat(timestamp).strftime("%Y-%m-%d-%H%M") if timestamp else datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M")
-    return f"{coin_clean}-{signal_type}-{ts_formatted}"
+    dur = {"scalping": "scalp", "long": "long"}.get(duration_type, "swing")
+    return f"{coin_clean}-{signal_type}-{dur}-{ts_formatted}"
 
 
-def generate_weekly_summary(supabase_client) -> Optional[str]:
+def analyze_timeframe(coingecko_id: str, symbol: str, days: int, duration_tag: str) -> Optional[dict]:
+    """Fetch OHLC for a given timeframe and return analysis if signal triggers."""
+    df = fetch_coingecko_ohlc(coingecko_id, days_to_interval(days))
+    if df is None or df.empty or len(df) < 20:
+        return None
+    analysis = calculate_indicators(df)
+    if analysis["signal_type"] == "neutral":
+        return None
+    analysis["duration_type"] = duration_tag
+    return analysis
+
+
+def days_to_interval(days: int) -> str:
+    """Map OHLC days parameter to a pseudo-interval name (used for logging)."""
+    return {1: "1h", 7: "1h", 14: "4h", 30: "4h"}.get(days, "1h")
+
+
+def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str, 
+                                      base_analysis: dict, base_tps: dict,
+                                      fund_result: dict, timestamp: str,
+                                      coin_display: str) -> list:
+    """Generate additional signal entries for scalping and long-term timeframes.
+    
+    Returns list of dicts (same format as all_analyses entries).
+    Only returns entries where the additional timeframe triggers a signal.
+    """
+    extras = []
+    
+    # Scalping: 5-min OHLC → resample to 15min
+    if cg_id:
+        ohlc_1d = fetch_coingecko_ohlc(cg_id, "1h")
+        if ohlc_1d is not None and len(ohlc_1d) >= 72:
+            # Resample from 5-min to 15-min (actually fetch days=1 which gives 5-min candles)
+            # but we use the existing 1h data as base; for 15min scalping we need fresh data
+            ohlc_15m = fetch_coingecko_ohlc(cg_id, "1h")
+            if ohlc_15m is not None and len(ohlc_15m) >= 20:
+                # Instead of resampling 1h to 15min (can't go to finer granularity),
+                # fetch the 5-min data with days=1
+                try:
+                    resp = requests.get(
+                        f"{COINGECKO_BASE}/coins/{cg_id}/ohlc",
+                        params={"vs_currency": "usd", "days": 1},
+                        timeout=12,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data and len(data) >= 72:  # need 72+ for RSI(14)
+                            rows = [{"timestamp": pd.to_datetime(c[0], unit="ms"), "open": float(c[1]), 
+                                     "high": float(c[2]), "low": float(c[3]), "close": float(c[4]), "volume": 0} 
+                                    for c in data]
+                            df_5m = pd.DataFrame(rows)
+                            # Resample to 15min
+                            df_15m = df_5m.resample("15min", on="timestamp").agg({
+                                "open": "first", "high": "max", "low": "min", 
+                                "close": "last", "volume": "sum"
+                            }).dropna()
+                            if len(df_15m) >= 20:
+                                scalping = calculate_indicators(df_15m)
+                                if scalping["signal_type"] != "neutral" and scalping["signal_type"] == base_analysis["signal_type"]:
+                                    scalping["duration_type"] = "scalping"
+                                    tps = calculate_dual_tps(scalping["current_price"], scalping["atr"], scalping["signal_type"])
+                                    extras.append({
+                                        "coin": coin_display, "coin_symbol": coin_symbol,
+                                        "tier": tier, "analysis": scalping,
+                                        "tps": tps, "fundamental": fund_result,
+                                        "timestamp": timestamp, "coingecko_id": cg_id,
+                                        "duration_type": "scalping",
+                                    })
+                                    logger.info(f"Generated SCALPING signal for {coin_symbol}")
+                except Exception as e:
+                    logger.debug(f"Scalping OHLC error for {cg_id}: {e}")
+        
+        # Long-term: fetch days=30 (4h candles), resample to daily
+        try:
+            resp = requests.get(
+                f"{COINGECKO_BASE}/coins/{cg_id}/ohlc",
+                params={"vs_currency": "usd", "days": 30},
+                timeout=12,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data and len(data) >= 20:
+                    rows = [{"timestamp": pd.to_datetime(c[0], unit="ms"), "open": float(c[1]),
+                             "high": float(c[2]), "low": float(c[3]), "close": float(c[4]), "volume": 0}
+                            for c in data]
+                    df_4h = pd.DataFrame(rows)
+                    # Resample to daily
+                    df_1d = df_4h.resample("1D", on="timestamp").agg({
+                        "open": "first", "high": "max", "low": "min",
+                        "close": "last", "volume": "sum"
+                    }).dropna()
+                    if len(df_1d) >= 14:
+                        long_term = calculate_indicators(df_1d)
+                        if long_term["signal_type"] != "neutral" and long_term["signal_type"] == base_analysis["signal_type"]:
+                            long_term["duration_type"] = "long"
+                            tps = calculate_dual_tps(long_term["current_price"], long_term["atr"], long_term["signal_type"])
+                            extras.append({
+                                "coin": coin_display, "coin_symbol": coin_symbol,
+                                "tier": tier, "analysis": long_term,
+                                "tps": tps, "fundamental": fund_result,
+                                "timestamp": timestamp, "coingecko_id": cg_id,
+                                "duration_type": "long",
+                            })
+                            logger.info(f"Generated LONG-TERM signal for {coin_symbol}")
+        except Exception as e:
+            logger.debug(f"Long-term OHLC error for {cg_id}: {e}")
+    
+    return extras
     """Generate a weekly market summary blog post from last 7 days of signals.
     
     Reuses Gemini quota (1 call/week). Stores result in Supabase blog_posts table.
@@ -1086,7 +1194,16 @@ def main():
                 "fundamental": fund_result,
                 "timestamp": timestamp,
                 "coingecko_id": cg_id,
+            "duration_type": item.get("duration_type", "swing"),
             })
+
+            # Generate additional signals for scalping and long-term timeframes
+            if cg_id and binance_blocked:
+                extras = generate_multi_timeframe_signals(
+                    coin_symbol, cg_id, tier, analysis, tps,
+                    fund_result, timestamp, coin_display
+                )
+                all_analyses.extend(extras)
 
         except Exception as e:
             logger.error(f"Error analyzing {coin_symbol}: {e}")
@@ -1125,7 +1242,7 @@ def main():
         tps = item["tps"]
         fund_result = item["fundamental"]
 
-        slug = create_slug(coin, analysis["signal_type"], timestamp)
+        slug = create_slug(coin, analysis["signal_type"], timestamp, item.get("duration_type", "swing"))
 
         if ai_explanations and coin in ai_explanations:
             explanations = ai_explanations[coin]
