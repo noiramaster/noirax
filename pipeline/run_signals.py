@@ -10,7 +10,7 @@ import sys
 import json
 import time
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import requests
@@ -707,6 +707,87 @@ def create_slug(coin: str, signal_type: str, timestamp: str) -> str:
     return f"{coin_clean}-{signal_type}-{ts_formatted}"
 
 
+def generate_weekly_summary(supabase_client) -> Optional[str]:
+    """Generate a weekly market summary blog post from last 7 days of signals.
+    
+    Reuses Gemini quota (1 call/week). Stores result in Supabase blog_posts table.
+    Only runs if no post was generated this week yet.
+    Returns the blog post slug if created, None if skipped/failed.
+    """
+    try:
+        # Check if already generated this week
+        week_start = datetime.now(timezone.utc) - timedelta(days=7)
+        existing = supabase_client.table("blog_posts").select("id").gte("created_at", week_start.isoformat()).limit(1).execute()
+        if existing.data:
+            logger.info("Weekly blog already generated this week")
+            return None
+
+        # Get signals from last 7 days
+        sigs = supabase_client.table("signals").select("coin,signal_type,confidence,resolved_result,created_at") \
+            .gte("created_at", week_start.isoformat()).order("created_at", desc=True).execute()
+        if not sigs.data:
+            logger.info("No signals in last 7 days for weekly blog")
+            return None
+
+        logger.info(f"Generating weekly blog from {len(sigs.data)} signals")
+
+        # Build prompt for Gemini
+        signals_summary = []
+        for s in sigs.data:
+            signals_summary.append(f"{s['coin']} {s['signal_type']} conf={s['confidence']}")
+        
+        prompt = f"""Generate a short weekly market summary (1 paragraph, max 3 sentences) in English for NOIRAX.
+        Tone: educational, beginner-friendly, never promise profits.
+        Context: This is an automated crypto trading signal system.
+        
+        Signals this week ({len(sigs.data)} total):
+        {chr(10).join(signals_summary[:50])}
+        
+        Return ONLY a plain text paragraph, no markdown, no JSON, no introductory phrases."""
+
+        if not GEMINI_API_KEY:
+            logger.info("No Gemini key for weekly blog")
+            return None
+
+        resp = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            logger.warning(f"Weekly blog Gemini error: {resp.status_code}")
+            return None
+
+        data = resp.json()
+        text = ""
+        candidates = data.get("candidates", [])
+        if candidates:
+            text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            text = text.strip()
+
+        if not text:
+            logger.warning("Empty Gemini response for weekly blog")
+            return None
+
+        # Save to Supabase blog_posts table
+        slug = f"weekly-summary-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+        post_data = {
+            "slug": slug,
+            "title": f"Weekly Market Summary — {datetime.now(timezone.utc).strftime('%B %d, %Y')}",
+            "content": text,
+            "excerpt": text[:150],
+            "published_at": datetime.now(timezone.utc).isoformat(),
+            "author": "NOIRAX AI",
+            "tags": ["weekly-summary", "automated"],
+        }
+        supabase_client.table("blog_posts").insert(post_data).execute()
+        logger.info(f"Weekly blog created: {slug}")
+        return slug
+    except Exception as e:
+        logger.warning(f"Weekly blog generation failed: {e}")
+        return None
+
+
 def verify_past_signals(supabase_client) -> int:
     """Check past pending signals against current price and mark resolved by TP/SL hit."""
     try:
@@ -780,13 +861,43 @@ def verify_past_signals(supabase_client) -> int:
         return 0
 
 
-def write_status_json():
-    """Write heartbeat status file for cron anti-desactivation."""
+def write_status_json(proxy_count: int = 0, real_count: int = 0, last_error: str = ""):
+    """Write heartbeat status file with counters."""
     try:
-        status = {"last_run": datetime.now(timezone.utc).isoformat(), "status": "ok"}
+        # Read existing status to accumulate counters
+        old = {"proxy_24h": 0, "real_24h": 0, "errors": []}
+        try:
+            with open("status.json") as f:
+                old = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        
+        # Rotate counters if last run was > 24h ago
+        last_ts = old.get("last_run", "")
+        if last_ts:
+            last_dt = datetime.fromisoformat(last_ts)
+            age_h = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600
+            if age_h > 24:
+                old["proxy_24h"] = 0
+                old["real_24h"] = 0
+                old["errors"] = []
+        
+        old["proxy_24h"] = old.get("proxy_24h", 0) + proxy_count
+        old["real_24h"] = old.get("real_24h", 0) + real_count
+        if last_error:
+            old.setdefault("errors", []).append({"time": datetime.now(timezone.utc).isoformat(), "error": last_error})
+            old["errors"] = old["errors"][-50:]  # keep last 50
+        
+        status = {
+            "last_run": datetime.now(timezone.utc).isoformat(),
+            "status": "ok",
+            "proxy_24h": old["proxy_24h"],
+            "real_24h": old["real_24h"],
+            "errors": old["errors"],
+        }
         with open("status.json", "w") as f:
             json.dump(status, f)
-        logger.info("Status file written")
+        logger.info(f"Status written: proxy={old['proxy_24h']} real={old['real_24h']}")
     except Exception as e:
         logger.warning(f"Could not write status file: {e}")
 
@@ -1009,8 +1120,17 @@ def main():
         verified = verify_past_signals(supabase_client)
         logger.info(f"Verified {verified} past signals")
 
+    # Track proxy vs real indicator usage
+    proxy_count = sum(1 for a in all_analyses if "(proxy)" in str(a["analysis"].get("indicators_used", [])))
+    real_count = len(all_analyses) - proxy_count
+
+    # Weekly blog summary (reuses Gemini call, no extra quota)
+    weekly_blog = None
+    if supabase_client:
+        weekly_blog = generate_weekly_summary(supabase_client)
+
     # Write heartbeat
-    write_status_json()
+    write_status_json(proxy_count=proxy_count, real_count=real_count)
 
     logger.info(f"Pipeline complete: {len(all_analyses)} signals")
     return len(all_analyses)
