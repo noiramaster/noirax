@@ -816,6 +816,9 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
             logger.debug(f"Long-term OHLC error for {cg_id}: {e}")
     
     return extras
+
+
+def generate_weekly_summary(supabase_client) -> Optional[str]:
     """Generate a weekly market summary blog post from last 7 days of signals.
     
     Reuses Gemini quota (1 call/week). Stores result in Supabase blog_posts table.
@@ -1194,7 +1197,7 @@ def main():
                 "fundamental": fund_result,
                 "timestamp": timestamp,
                 "coingecko_id": cg_id,
-            "duration_type": item.get("duration_type", "swing"),
+                "duration_type": "swing",
             })
 
             # Generate additional signals for scalping and long-term timeframes
