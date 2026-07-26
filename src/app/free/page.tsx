@@ -5,10 +5,27 @@ import { getLang, t } from '@/lib/i18n';
 import SignalCard from '@/components/SignalCard';
 import type { Signal } from '@/lib/types';
 
+const DURATIONS = ['all', 'scalping', 'swing', 'long'];
+
+const durationLabels: Record<string, string> = {
+  all: 'duration.all',
+  scalping: 'duration.scalping',
+  swing: 'duration.swing',
+  long: 'duration.long',
+};
+
+const durationDescriptions: Record<string, string> = {
+  all: '',
+  scalping: 'duration.scalpingDesc',
+  swing: 'duration.swingDesc',
+  long: 'duration.longDesc',
+};
+
 export default function FreePage() {
   const lang = getLang();
   const [signals, setSignals] = useState<Signal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [duration, setDuration] = useState('all');
 
   useEffect(() => {
     fetch('/api/signals?tier=free')
@@ -18,22 +35,40 @@ export default function FreePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const filtered = duration === 'all' ? signals : signals.filter((s) => s.duration_type === duration);
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
       <h1 className="font-mono text-3xl text-accent-green mb-2">&gt; {t('free.title', lang)}</h1>
       <p className="text-sm text-muted mb-6">{t('free.subtitle', lang)}</p>
 
-      <TerminalBlock className="mb-6 text-xs">
-        {t('free.delayWarning', lang)}
-      </TerminalBlock>
+      {/* Duration tabs */}
+      <div className="flex gap-1 mb-6 flex-wrap border-b border-border pb-2">
+        {DURATIONS.map((d) => (
+          <button
+            key={d}
+            onClick={() => setDuration(d)}
+            className={`px-3 py-1.5 text-xs font-mono rounded-t transition-colors cursor-pointer ${
+              duration === d
+                ? 'text-accent-green border-b-2 border-accent-green'
+                : 'text-muted hover:text-foreground'
+            }`}
+          >
+            {t(durationLabels[d], lang)}
+          </button>
+        ))}
+      </div>
+      {duration !== 'all' && (
+        <p className="text-xs text-muted mb-4 font-mono">{t(durationDescriptions[duration], lang)}</p>
+      )}
 
       {loading ? (
         <div className="text-muted text-sm font-mono">{t('common.loading', lang)}</div>
-      ) : signals.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="text-muted text-sm font-mono">{t('free.noSignals', lang)}</div>
       ) : (
         <div className="space-y-3">
-          {signals.map((s) => (
+          {filtered.map((s) => (
             <SignalCard key={s.id} signal={s} />
           ))}
         </div>

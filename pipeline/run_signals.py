@@ -1181,6 +1181,7 @@ def main():
             "take_profit_1_optimized": tps["take_profit_1_optimized"],
             "take_profit_2_optimized": tps["take_profit_2_optimized"],
             "take_profit_3_optimized": tps["take_profit_3_optimized"],
+            "duration_type": "swing",
         }
 
         if supabase_client:

@@ -30,6 +30,7 @@ export interface Signal {
   resolved_at: string | null;
   resolved_result: 'win' | 'loss' | 'pending' | null;
   resolved_price: number | null;
+  duration_type?: 'scalping' | 'swing' | 'long';
 }
 
 export interface UserProfile {
