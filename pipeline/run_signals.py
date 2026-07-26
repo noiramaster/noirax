@@ -766,7 +766,7 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                             }).dropna()
                             if len(df_15m) >= 20:
                                 scalping = calculate_indicators(df_15m)
-                                if scalping["signal_type"] != "neutral" and scalping["signal_type"] == base_analysis["signal_type"]:
+                                if scalping["signal_type"] != "neutral":
                                     scalping["duration_type"] = "scalping"
                                     tps = calculate_dual_tps(scalping["current_price"], scalping["atr"], scalping["signal_type"])
                                     extras.append({
@@ -801,7 +801,7 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                     }).dropna()
                     if len(df_1d) >= 14:
                         long_term = calculate_indicators(df_1d)
-                        if long_term["signal_type"] != "neutral" and long_term["signal_type"] == base_analysis["signal_type"]:
+                        if long_term["signal_type"] != "neutral":
                             long_term["duration_type"] = "long"
                             tps = calculate_dual_tps(long_term["current_price"], long_term["atr"], long_term["signal_type"])
                             extras.append({
@@ -1067,7 +1067,7 @@ def write_status_json(proxy_count: int = 0, real_count: int = 0, last_error: str
         old["proxy_24h"] = old.get("proxy_24h", 0) + proxy_count
         old["real_24h"] = old.get("real_24h", 0) + real_count
         if last_error:
-            old.setdefault("errors", []).append({"time": datetime.now(timezone.utc).isoformat(), "error": last_error})
+            old["errors"] = old.get("errors", []) + [{"time": datetime.now(timezone.utc).isoformat(), "error": last_error}]
             old["errors"] = old["errors"][-50:]  # keep last 50
         
         status = {
