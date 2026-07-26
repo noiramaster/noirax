@@ -731,96 +731,97 @@ def days_to_interval(days: int) -> str:
     return {1: "1h", 7: "1h", 14: "4h", 30: "4h"}.get(days, "1h")
 
 
-def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str, 
-                                      base_analysis: dict, base_tps: dict,
+def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                                       fund_result: dict, timestamp: str,
                                       coin_display: str) -> list:
-    """Generate additional signal entries for scalping and long-term timeframes.
+    """Analyze ALL 3 timeframes (15min scalping, 1h swing, 1d long) and return signals for each that triggers.
     
-    Returns list of dicts (same format as all_analyses entries).
-    Only returns entries where the additional timeframe triggers a signal.
+    This is the PRIMARY analysis — each signal is tagged with its REAL timeframe.
+    0 extra OHLC calls if we already have 1h data; otherwise 3 calls per coin.
     """
     extras = []
+    ohlc_1h = None
     
-    # Scalping: 5-min OHLC → resample to 15min
-    if cg_id:
-        ohlc_1d = fetch_coingecko_ohlc(cg_id, "1h")
-        if ohlc_1d is not None and len(ohlc_1d) >= 72:
-            # Resample from 5-min to 15-min (actually fetch days=1 which gives 5-min candles)
-            # but we use the existing 1h data as base; for 15min scalping we need fresh data
-            ohlc_15m = fetch_coingecko_ohlc(cg_id, "1h")
-            if ohlc_15m is not None and len(ohlc_15m) >= 20:
-                # Instead of resampling 1h to 15min (can't go to finer granularity),
-                # fetch the 5-min data with days=1
-                try:
-                    resp = requests.get(
-                        f"{COINGECKO_BASE}/coins/{cg_id}/ohlc",
-                        params={"vs_currency": "usd", "days": 1, "x_cg_demo_api_key": COINGECKO_API_KEY},
-                        timeout=12,
-                    )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        if data and len(data) >= 72:  # need 72+ for RSI(14)
-                            rows = [{"timestamp": pd.to_datetime(c[0], unit="ms"), "open": float(c[1]), 
-                                     "high": float(c[2]), "low": float(c[3]), "close": float(c[4]), "volume": 0} 
-                                    for c in data]
-                            df_5m = pd.DataFrame(rows)
-                            # Resample to 15min
-                            df_15m = df_5m.resample("15min", on="timestamp").agg({
-                                "open": "first", "high": "max", "low": "min", 
-                                "close": "last", "volume": "sum"
-                            }).dropna()
-                            if len(df_15m) >= 20:
-                                scalping = calculate_indicators(df_15m)
-                                if scalping["signal_type"] != "neutral":
-                                    scalping["duration_type"] = "scalping"
-                                    tps = calculate_dual_tps(scalping["current_price"], scalping["atr"], scalping["signal_type"])
-                                    extras.append({
-                                        "coin": coin_display, "coin_symbol": coin_symbol,
-                                        "tier": tier, "analysis": scalping,
-                                        "tps": tps, "fundamental": fund_result,
-                                        "timestamp": timestamp, "coingecko_id": cg_id,
-                                        "duration_type": "scalping",
-                                    })
-                                    logger.info(f"Generated SCALPING signal for {coin_symbol}")
-                except Exception as e:
-                    logger.debug(f"Scalping OHLC error for {cg_id}: {e}")
-        
-        # Long-term: fetch days=30 (4h candles), resample to daily
-        try:
-            resp = requests.get(
-                f"{COINGECKO_BASE}/coins/{cg_id}/ohlc",
-                params={"vs_currency": "usd", "days": 30, "x_cg_demo_api_key": COINGECKO_API_KEY,
-            },
-                timeout=12,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if data and len(data) >= 20:
-                    rows = [{"timestamp": pd.to_datetime(c[0], unit="ms"), "open": float(c[1]),
-                             "high": float(c[2]), "low": float(c[3]), "close": float(c[4]), "volume": 0}
-                            for c in data]
-                    df_4h = pd.DataFrame(rows)
-                    # Resample to daily
-                    df_1d = df_4h.resample("1D", on="timestamp").agg({
-                        "open": "first", "high": "max", "low": "min",
-                        "close": "last", "volume": "sum"
-                    }).dropna()
-                    if len(df_1d) >= 14:
-                        long_term = calculate_indicators(df_1d)
-                        if long_term["signal_type"] != "neutral":
-                            long_term["duration_type"] = "long"
-                            tps = calculate_dual_tps(long_term["current_price"], long_term["atr"], long_term["signal_type"])
-                            extras.append({
-                                "coin": coin_display, "coin_symbol": coin_symbol,
-                                "tier": tier, "analysis": long_term,
-                                "tps": tps, "fundamental": fund_result,
-                                "timestamp": timestamp, "coingecko_id": cg_id,
-                                "duration_type": "long",
-                            })
-                            logger.info(f"Generated LONG-TERM signal for {coin_symbol}")
-        except Exception as e:
-            logger.debug(f"Long-term OHLC error for {cg_id}: {e}")
+    # 1. SWING (1h timeframe) — most common, baseline
+    ohlc_1h = fetch_coingecko_ohlc(cg_id, "1h")
+    if ohlc_1h is not None and len(ohlc_1h) >= 20:
+        swing = calculate_indicators(ohlc_1h)
+        if swing["signal_type"] != "neutral":
+            swing["duration_type"] = "swing"
+            tps = calculate_dual_tps(swing["current_price"], swing["atr"], swing["signal_type"])
+            extras.append({
+                "coin": coin_display, "coin_symbol": coin_symbol,
+                "tier": tier, "analysis": swing, "tps": tps,
+                "fundamental": fund_result, "timestamp": timestamp,
+                "coingecko_id": cg_id, "duration_type": "swing",
+            })
+            logger.info(f"Swing signal for {coin_symbol}: {swing['signal_type']} RSI={swing['rsi']}")
+    
+    # 2. SCALPING (15min from 5-min OHLC)
+    try:
+        resp = requests.get(
+            f"{COINGECKO_BASE}/coins/{cg_id}/ohlc",
+            params={"vs_currency": "usd", "days": 1, "x_cg_demo_api_key": COINGECKO_API_KEY},
+            timeout=12,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data and len(data) >= 72:
+                rows = [{"timestamp": pd.to_datetime(c[0], unit="ms"), "open": float(c[1]),
+                         "high": float(c[2]), "low": float(c[3]), "close": float(c[4]), "volume": 0}
+                        for c in data]
+                df_5m = pd.DataFrame(rows)
+                df_15m = df_5m.resample("15min", on="timestamp").agg({
+                    "open": "first", "high": "max", "low": "min",
+                    "close": "last", "volume": "sum"
+                }).dropna()
+                if len(df_15m) >= 20:
+                    scalping = calculate_indicators(df_15m)
+                    if scalping["signal_type"] != "neutral":
+                        scalping["duration_type"] = "scalping"
+                        tps = calculate_dual_tps(scalping["current_price"], scalping["atr"], scalping["signal_type"])
+                        extras.append({
+                            "coin": coin_display, "coin_symbol": coin_symbol,
+                            "tier": tier, "analysis": scalping, "tps": tps,
+                            "fundamental": fund_result, "timestamp": timestamp,
+                            "coingecko_id": cg_id, "duration_type": "scalping",
+                        })
+                        logger.info(f"Scalping signal for {coin_symbol}: {scalping['signal_type']} RSI={scalping['rsi']} (15min from 5-min OHLC)")
+    except Exception as e:
+        logger.debug(f"OHLC 5-min error for {cg_id}: {e}")
+    
+    # 3. LONG-TERM (daily from 4h OHLC)
+    try:
+        resp = requests.get(
+            f"{COINGECKO_BASE}/coins/{cg_id}/ohlc",
+            params={"vs_currency": "usd", "days": 30, "x_cg_demo_api_key": COINGECKO_API_KEY},
+            timeout=12,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data and len(data) >= 20:
+                rows = [{"timestamp": pd.to_datetime(c[0], unit="ms"), "open": float(c[1]),
+                         "high": float(c[2]), "low": float(c[3]), "close": float(c[4]), "volume": 0}
+                        for c in data]
+                df_4h = pd.DataFrame(rows)
+                df_1d = df_4h.resample("1D", on="timestamp").agg({
+                    "open": "first", "high": "max", "low": "min",
+                    "close": "last", "volume": "sum"
+                }).dropna()
+                if len(df_1d) >= 14:
+                    long_term = calculate_indicators(df_1d)
+                    if long_term["signal_type"] != "neutral":
+                        long_term["duration_type"] = "long"
+                        tps = calculate_dual_tps(long_term["current_price"], long_term["atr"], long_term["signal_type"])
+                        extras.append({
+                            "coin": coin_display, "coin_symbol": coin_symbol,
+                            "tier": tier, "analysis": long_term, "tps": tps,
+                            "fundamental": fund_result, "timestamp": timestamp,
+                            "coingecko_id": cg_id, "duration_type": "long",
+                        })
+                        logger.info(f"Long-term signal for {coin_symbol}: {long_term['signal_type']} RSI={long_term['rsi']} (daily from 4h OHLC)")
+    except Exception as e:
+        logger.debug(f"OHLC 4h error for {cg_id}: {e}")
     
     return extras
 
@@ -1193,40 +1194,28 @@ def main():
                         logger.info(f"Enhanced {coin_symbol} with real OHLC indicators")
                     analysis = enhanced
 
-            # Calculate dual TP/SL levels
+            # Calculate dual TP/SL levels for the snapshot analysis (used as fallback)
             tps = calculate_dual_tps(analysis["current_price"], analysis["atr"], analysis["signal_type"])
 
             tier = "free" if coin_symbol in free_coins else "premium"
             coin_display = coin_symbol.replace("USDT", "/USDT")
 
-            # Determine duration category by coin rank (market cap)
-            coin_index = next((i for i, c in enumerate(coins) if c["symbol"] == coin_symbol), -1)
-            if coin_index < 30:
-                duration_type = "scalping"
-            elif coin_index < 50:
-                duration_type = "swing"
+            # Multi-timeframe analysis: generate signals for 15min, 1h, and daily timeframes
+            timeframe_signals = generate_multi_timeframe_signals(
+                coin_symbol, cg_id, tier, fund_result, timestamp, coin_display
+            )
+
+            if timeframe_signals:
+                all_analyses.extend(timeframe_signals)
             else:
-                duration_type = "long"
-
-            all_analyses.append({
-                "coin": coin_display,
-                "coin_symbol": coin_symbol,
-                "tier": tier,
-                "analysis": analysis,
-                "tps": tps,
-                "fundamental": fund_result,
-                "timestamp": timestamp,
-                "coingecko_id": cg_id,
-                "duration_type": duration_type,
-            })
-
-            # Generate additional signals for scalping and long-term timeframes
-            if cg_id and binance_blocked:
-                extras = generate_multi_timeframe_signals(
-                    coin_symbol, cg_id, tier, analysis, tps,
-                    fund_result, timestamp, coin_display
-                )
-                all_analyses.extend(extras)
+                # Fallback: if no timeframe triggered, use snapshot analysis as swing
+                analysis["duration_type"] = "swing"
+                all_analyses.append({
+                    "coin": coin_display, "coin_symbol": coin_symbol,
+                    "tier": tier, "analysis": analysis, "tps": tps,
+                    "fundamental": fund_result, "timestamp": timestamp,
+                    "coingecko_id": cg_id, "duration_type": "swing",
+                })
 
         except Exception as e:
             logger.error(f"Error analyzing {coin_symbol}: {e}")
