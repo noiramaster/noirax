@@ -860,23 +860,19 @@ def verify_past_signals(supabase_client) -> int:
                 tier = signal.get("tier", "free")  # Default to free
                 
                 # Evaluate BOTH sets of levels against OHLC range
-                # Conservative (Free)
+                # Conservative (Free) - only checks SL conservative and TP1 conservative
                 free_result = "open"
                 free_tp = None
                 if entry <= 0: free_result = "skip"
                 
                 if free_result == "open" and signal_type == "buy":
                     if sl_cons > 0 and min_low <= sl_cons: free_result = "loss"
-                    elif tp3_opt > 0 and max_high >= tp3_opt: free_result = "win"; free_tp = 3
-                    elif tp2_opt > 0 and max_high >= tp2_opt: free_result = "win"; free_tp = 2
                     elif tp1_cons > 0 and max_high >= tp1_cons: free_result = "win"; free_tp = 1
                 elif free_result == "open" and signal_type == "sell":
                     if sl_cons > 0 and max_high >= sl_cons: free_result = "loss"
-                    elif tp3_opt > 0 and min_low <= tp3_opt: free_result = "win"; free_tp = 3
-                    elif tp2_opt > 0 and min_low <= tp2_opt: free_result = "win"; free_tp = 2
                     elif tp1_cons > 0 and min_low <= tp1_cons: free_result = "win"; free_tp = 1
                 
-                # Optimized (Premium)
+                # Optimized (Premium) - checks wider SL and TP ladder
                 premium_result = "open"
                 premium_tp = None
                 
