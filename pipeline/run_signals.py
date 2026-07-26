@@ -535,7 +535,7 @@ Return ONLY valid JSON, no markdown."""
                 timeout=30,
             )
             if resp.status_code == 429:
-                wait = 2 ** attempt * 10
+                wait = 2 ** attempt * 30
                 logger.warning(f"Gemini 429, backoff {wait}s...")
                 time.sleep(wait)
                 continue
