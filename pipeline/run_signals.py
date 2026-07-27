@@ -541,10 +541,12 @@ Return ONLY valid JSON, no markdown."""
                 timeout=30,
             )
             if resp.status_code == 429:
-                wait = 2 ** attempt * 30
-                logger.warning(f"Gemini 429, backoff {wait}s...")
-                time.sleep(wait)
-                continue
+                if attempt == 0:
+                    logger.warning("Gemini 429, waiting 60s then retrying...")
+                    time.sleep(60)
+                    continue
+                logger.warning("Gemini still rate-limited after 60s, using fallback")
+                return None
             if resp.status_code != 200:
                 logger.warning(f"Gemini API error {resp.status_code}: {resp.text[:200]}")
                 if attempt < 2:
@@ -873,6 +875,14 @@ def generate_weekly_summary(supabase_client) -> Optional[str]:
             json={"contents": [{"parts": [{"text": prompt}]}]},
             timeout=30,
         )
+        if resp.status_code == 429:
+            logger.warning("Weekly blog Gemini 429, waiting 60s before retry...")
+            time.sleep(60)
+            resp = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+                timeout=30,
+            )
         if resp.status_code != 200:
             logger.warning(f"Weekly blog Gemini error: {resp.status_code}")
             return None
