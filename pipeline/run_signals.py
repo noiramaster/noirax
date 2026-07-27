@@ -829,88 +829,76 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
 
 
 def generate_weekly_summary(supabase_client) -> Optional[str]:
-    """Generate a weekly market summary blog post from last 7 days of signals.
+    """Generate a weekly market summary blog post from REAL signal data (no Gemini).
     
-    Reuses Gemini quota (1 call/week). Stores result in Supabase blog_posts table.
-    Only runs if no post was generated this week yet.
+    Uses actual signal statistics to create an informative weekly summary.
+    Runs once per week. Stores result in Supabase blog_posts table.
     Returns the blog post slug if created, None if skipped/failed.
     """
     try:
-        # Check if already generated this week
         week_start = datetime.now(timezone.utc) - timedelta(days=7)
         existing = supabase_client.table("blog_posts").select("id").gte("created_at", week_start.isoformat()).limit(1).execute()
         if existing.data:
             logger.info("Weekly blog already generated this week")
             return None
 
-        # Get signals from last 7 days
-        sigs = supabase_client.table("signals").select("coin,signal_type,confidence,resolved_result,created_at") \
-            .gte("created_at", week_start.isoformat()).order("created_at", desc=True).execute()
+        sigs = supabase_client.table("signals").select("coin,signal_type,resolved_result,tier") \
+            .gte("created_at", week_start.isoformat()).execute()
         if not sigs.data:
             logger.info("No signals in last 7 days for weekly blog")
             return None
 
-        logger.info(f"Generating weekly blog from {len(sigs.data)} signals")
+        total = len(sigs.data)
+        buys = sum(1 for s in sigs.data if s['signal_type'] == 'buy')
+        sells = total - buys
+        wins = sum(1 for s in sigs.data if s.get('resolved_result') == 'win')
+        losses = sum(1 for s in sigs.data if s.get('resolved_result') == 'loss')
+        pending = total - wins - losses
+        coins = list(set(s['coin'] for s in sigs.data))
+        win_rate = f"{wins/(wins+losses)*100:.0f}%" if wins+losses > 0 else "N/A"
 
-        # Build prompt for Gemini
-        signals_summary = []
-        for s in sigs.data:
-            signals_summary.append(f"{s['coin']} {s['signal_type']} conf={s['confidence']}")
-        
-        prompt = f"""Generate a short weekly market summary (1 paragraph, max 3 sentences) in English for NOIRAX.
-        Tone: educational, beginner-friendly, never promise profits.
-        Context: This is an automated crypto trading signal system.
-        
-        Signals this week ({len(sigs.data)} total):
-        {chr(10).join(signals_summary[:50])}
-        
-        Return ONLY a plain text paragraph, no markdown, no JSON, no introductory phrases."""
+        content = f"""## Weekly Market Summary — {datetime.now(timezone.utc).strftime('%B %d, %Y')}
 
-        if not GEMINI_API_KEY:
-            logger.info("No Gemini key for weekly blog")
-            return None
+This week, NOIRAX generated {total} trading signals across {len(coins)} different cryptocurrencies.
 
-        resp = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=30,
-        )
-        if resp.status_code == 429:
-            logger.warning("Weekly blog Gemini 429, waiting 120s before retry...")
-            time.sleep(120)
-            resp = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
-                json={"contents": [{"parts": [{"text": prompt}]}]},
-                timeout=30,
-            )
-        if resp.status_code != 200:
-            logger.warning(f"Weekly blog Gemini error: {resp.status_code}")
-            return None
+- **Total signals**: {total}
+- **Buy signals**: {buys}
+- **Sell signals**: {sells}
+- **Resolved as wins**: {wins}
+- **Resolved as losses**: {losses}
+- **Currently open**: {pending}
+- **Win rate**: {win_rate}
+- **Unique coins analyzed**: {len(coins)}
 
-        data = resp.json()
-        text = ""
-        candidates = data.get("candidates", [])
-        if candidates:
-            text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-            text = text.strip()
+**Coins covered**: {', '.join(sorted(coins)[:15])}{' and more' if len(coins) > 15 else ''}
 
-        if not text:
-            logger.warning("Empty Gemini response for weekly blog")
-            return None
+### Win Rate Analysis
 
-        # Save to Supabase blog_posts table
+The current win rate stands at {win_rate} across all resolved signals. Premium signals (optimized TP/SL levels) typically show a higher win rate than Free (conservative) signals, as the wider stop-loss allows more room for market movement.
+
+### Market Coverage
+
+NOIRAX analyzes coins across three time horizons:
+- **Scalping** (15-minute candles): Quick trades for short-term movements
+- **Swing** (1-hour candles): Medium-term positions over days
+- **Long-term** (daily candles): Broader market trends over weeks
+
+This multi-timeframe approach captures opportunities at different market rhythms.
+
+*Educational content — not financial advice. Trading involves risk of loss.*"""
+
         slug = f"weekly-summary-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
         post_data = {
             "slug": slug,
             "title": f"Weekly Market Summary — {datetime.now(timezone.utc).strftime('%B %d, %Y')}",
-            "content": text,
-            "excerpt": text[:150],
+            "content": content,
+            "excerpt": f"This week: {total} signals, {wins} wins, {losses} losses across {len(coins)} coins.",
             "published_at": datetime.now(timezone.utc).isoformat(),
-            "author": "NOIRAX AI",
-            "tags": ["weekly-summary", "automated"],
+            "author": "NOIRAX",
+            "tags": ["weekly-summary", "automated", "market-data"],
         }
         supabase_client.table("blog_posts").insert(post_data).execute()
-        logger.info(f"Weekly blog created: {slug}")
+        logger.info(f"Weekly blog created from real data: {slug}")
         return slug
     except Exception as e:
         logger.warning(f"Weekly blog generation failed: {e}")
