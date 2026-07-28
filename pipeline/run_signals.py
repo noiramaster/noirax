@@ -227,12 +227,24 @@ def get_klines(symbol: str, interval: str = "1h", limit: int = 200, coingecko_id
     return pd.DataFrame()
 
 
-def calculate_indicators(df: pd.DataFrame) -> dict:
-    """Calculate technical indicators and return signal assessment."""
+def calculate_indicators(df: pd.DataFrame, volume_24h: float = 0) -> dict:
+    """Calculate technical indicators and return signal assessment.
+    
+    Args:
+        df: OHLC DataFrame with columns timestamp, open, high, low, close, volume
+        volume_24h: 24h volume from CoinGecko markets (used when OHLC volume is 0)
+    """
     close = df["close"].values
     high = df["high"].values
     low = df["low"].values
     volume = df["volume"].values
+    
+    # CoinGecko OHLC has volume=0; use 24h volume as proxy if provided
+    has_real_volume = volume.sum() > 0
+    if not has_real_volume and volume_24h > 0:
+        # Distribute 24h volume evenly across candles as approximation
+        vol_per_candle = volume_24h / len(volume)
+        volume = np.full_like(volume, vol_per_candle)
 
     # RSI (14)
     delta = np.diff(close)
@@ -394,7 +406,7 @@ def fetch_coingecko_ohlc(coingecko_id: str, interval: str = "1h") -> Optional[pd
     return None
 
 
-def enhance_with_real_ohlc(analysis: dict, coin_symbol: str, coingecko_id: str) -> dict:
+def enhance_with_real_ohlc(analysis: dict, coin_symbol: str, coingecko_id: str, volume_24h: float = 0) -> dict:
     """Replace proxy indicator values with real OHLC-calculated ones if available.
     
     Takes the simplified analysis dict and upgrades it with real technical indicators
@@ -404,7 +416,7 @@ def enhance_with_real_ohlc(analysis: dict, coin_symbol: str, coingecko_id: str) 
     if df is None or df.empty:
         return analysis
     
-    real = calculate_indicators(df)
+    real = calculate_indicators(df, volume_24h=volume_24h)
     if real["signal_type"] == "neutral":
         logger.info(f"OHLC for {coin_symbol}: RSI={real['rsi']} MACD={real['macd_bullish']} SMA={real['sma_bullish']} (neutral, keeping proxy signal)")
         return analysis
@@ -735,7 +747,7 @@ def days_to_interval(days: int) -> str:
 
 def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                                       fund_result: dict, timestamp: str,
-                                      coin_display: str) -> list:
+                                      coin_display: str, volume_24h: float = 0) -> list:
     """Analyze ALL 3 timeframes (15min scalping, 1h swing, 1d long) and return signals for each that triggers.
     
     This is the PRIMARY analysis — each signal is tagged with its REAL timeframe.
@@ -747,7 +759,7 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
     # 1. SWING (1h timeframe) — most common, baseline
     ohlc_1h = fetch_coingecko_ohlc(cg_id, "1h")
     if ohlc_1h is not None and len(ohlc_1h) >= 20:
-        swing = calculate_indicators(ohlc_1h)
+        swing = calculate_indicators(ohlc_1h, volume_24h=volume_24h)
         if swing["signal_type"] != "neutral":
             swing["duration_type"] = "swing"
             tps = calculate_dual_tps(swing["current_price"], swing["atr"], swing["signal_type"])
@@ -778,7 +790,7 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                     "close": "last", "volume": "sum"
                 }).dropna()
                 if len(df_15m) >= 20:
-                    scalping = calculate_indicators(df_15m)
+                    scalping = calculate_indicators(df_15m, volume_24h=volume_24h)
                     if scalping["signal_type"] != "neutral":
                         scalping["duration_type"] = "scalping"
                         tps = calculate_dual_tps(scalping["current_price"], scalping["atr"], scalping["signal_type"])
@@ -811,7 +823,7 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                     "close": "last", "volume": "sum"
                 }).dropna()
                 if len(df_1d) >= 14:
-                    long_term = calculate_indicators(df_1d)
+                    long_term = calculate_indicators(df_1d, volume_24h=volume_24h)
                     if long_term["signal_type"] != "neutral":
                         long_term["duration_type"] = "long"
                         tps = calculate_dual_tps(long_term["current_price"], long_term["atr"], long_term["signal_type"])
@@ -1186,8 +1198,9 @@ def main():
             if binance_blocked:
                 cg_id = coin_data.get("coingecko_id", "")
                 if cg_id:
+                    vol_24h = coin_data.get("volume_24h", 0) or 0
                     logger.info(f"Fetching real OHLC for {coin_symbol} (id={cg_id})...")
-                    enhanced = enhance_with_real_ohlc(analysis, coin_symbol, cg_id)
+                    enhanced = enhance_with_real_ohlc(analysis, coin_symbol, cg_id, vol_24h)
                     if enhanced != analysis:
                         logger.info(f"Enhanced {coin_symbol} with real OHLC indicators")
                     analysis = enhanced
@@ -1200,7 +1213,8 @@ def main():
 
             # Multi-timeframe analysis: generate signals for 15min, 1h, and daily timeframes
             timeframe_signals = generate_multi_timeframe_signals(
-                coin_symbol, cg_id, tier, fund_result, timestamp, coin_display
+                coin_symbol, cg_id, tier, fund_result, timestamp, coin_display,
+                volume_24h=coin_data.get("volume_24h", 0) if binance_blocked and coin_data else 0
             )
 
             if timeframe_signals:
