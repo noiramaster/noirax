@@ -661,21 +661,21 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
         indicators_used.append("MACD(proxy)")
         indicators_used.append("Volume")
 
-    if change_7d > 5 and change_24h > 0:
+    if change_7d > 2 and change_24h > 0:
         signals_list.append("macd_bullish")
         confidence += CONFIDENCE_MACD
-    elif change_7d < -5 and change_24h < 0:
+    elif change_7d < -2 and change_24h < 0:
         signals_list.append("macd_bearish")
         confidence -= CONFIDENCE_MACD
 
-    if vol_to_mcap > 0.1:
+    if vol_to_mcap > 0.03:
         signals_list.append("volume_spike")
         confidence += CONFIDENCE_VOLUME
 
-    if change_7d < -10:
+    if change_7d < -5:
         signals_list.append("near_support")
         confidence += CONFIDENCE_SUPPORT
-    elif change_7d > 10:
+    elif change_7d > 5:
         signals_list.append("near_resistance")
         confidence -= CONFIDENCE_RESISTANCE
 
@@ -698,7 +698,7 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
         "rsi": round(rsi_proxy, 1),
         "macd_bullish": change_7d > 2 and change_24h > 0,
         "sma_bullish": change_7d > 0,
-        "volume_spike": vol_to_mcap > 0.1,
+        "volume_spike": vol_to_mcap > 0.03,
         "current_price": price,
         "recent_high": price * (1 + abs(change_24h / 100)),
         "recent_low": price * (1 - abs(change_24h / 100)),
