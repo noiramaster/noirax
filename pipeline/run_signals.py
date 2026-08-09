@@ -592,7 +592,7 @@ Combine technical AND fundamental analysis into a single coherent explanation.
 Use simple, beginner-friendly language. Never guarantee profits. Always educational.
 
 IMPORTANT: When explaining, reference both the technical indicators AND the fundamental signals (e.g. "news sentiment is positive", "unusual volume detected", "large holder activity").
-Do NOT reveal exact thresholds, weights, or specific data sources — use general terms like "market analysis", "on-chain activity", "news sentiment".
+Do NOT reveal exact thresholds, weights, or specific data sources â€” use general terms like "market analysis", "on-chain activity", "news sentiment".
 
 Return a JSON object where keys are coins (e.g. "BTC/USDT") and values are objects with language codes as keys.
 
@@ -643,17 +643,17 @@ Return ONLY valid JSON, no markdown."""
 def generate_fallback_explanations(coin: str, analysis: dict, fund_result: dict) -> dict:
     """Generate template-based explanations in all 7 languages when AI fails."""
     templates = {
-        "en": "{coin} shows a {type} setup with RSI at {rsi}. {fund_ctx} Educational content — not financial advice.",
+        "en": "{coin} shows a {type} setup with RSI at {rsi}. {fund_ctx} Educational content â€” not financial advice.",
         "es": "{coin} muestra un setup {type_es} con RSI en {rsi}. {fund_ctx} Contenido educativo.",
-        "pt": "{coin} mostra um setup {type_pt} com RSI em {rsi}. {fund_ctx} Conteúdo educativo.",
-        "fr": "{coin} montre un setup {type_fr} avec RSI à {rsi}. {fund_ctx} Contenu éducatif.",
+        "pt": "{coin} mostra um setup {type_pt} com RSI em {rsi}. {fund_ctx} ConteÃºdo educativo.",
+        "fr": "{coin} montre un setup {type_fr} avec RSI Ã  {rsi}. {fund_ctx} Contenu Ã©ducatif.",
         "de": "{coin} zeigt ein {type_de} Setup mit RSI bei {rsi}. {fund_ctx} Bildungsinhalt.",
         "it": "{coin} mostra un setup {type_it} con RSI a {rsi}. {fund_ctx} Contenuto educativo.",
-        "ar": "{coin} يظهر إعداد {type_ar} مع RSI عند {rsi}. {fund_ctx} محتوى تعليمي.",
+        "ar": "{coin} ÙŠØ¸Ù‡Ø± Ø¥Ø¹Ø¯Ø§Ø¯ {type_ar} Ù…Ø¹ RSI Ø¹Ù†Ø¯ {rsi}. {fund_ctx} Ù…Ø­ØªÙˆÙ‰ ØªØ¹Ù„ÙŠÙ…ÙŠ.",
     }
     type_map = {
-        "buy": {"en": "bullish", "es": "alcista", "pt": "altista", "fr": "haussier", "de": "bullishes", "it": "rialzista", "ar": "صاعد"},
-        "sell": {"en": "bearish", "es": "bajista", "pt": "baixista", "fr": "baissier", "de": "bärisches", "it": "ribassista", "ar": "هابط"},
+        "buy": {"en": "bullish", "es": "alcista", "pt": "altista", "fr": "haussier", "de": "bullishes", "it": "rialzista", "ar": "ØµØ§Ø¹Ø¯"},
+        "sell": {"en": "bearish", "es": "bajista", "pt": "baixista", "fr": "baissier", "de": "bÃ¤risches", "it": "ribassista", "ar": "Ù‡Ø§Ø¨Ø·"},
     }
     # Fundamental context (generic terms only)
     tags = fund_result.get("tags", [])
@@ -663,15 +663,15 @@ def generate_fallback_explanations(coin: str, analysis: dict, fund_result: dict)
     elif "NEWS_NEGATIVE" in tags:
         fund_ctx = "Negative news sentiment detected."
     elif "NEWS_CRITICAL" in tags:
-        fund_ctx = "Critical news alert — exercise caution."
+        fund_ctx = "Critical news alert â€” exercise caution."
     if "WHALE_ACTIVITY" in tags:
         fund_ctx += " Large holder activity detected."
     if "VOLUME_ANOMALY" in tags:
         fund_ctx += " Unusual trading volume observed."
     if "FUNDING_RATE_HIGH" in tags:
-        fund_ctx += " Elevated funding rate — potential correction."
+        fund_ctx += " Elevated funding rate â€” potential correction."
     elif "FUNDING_RATE_LOW" in tags:
-        fund_ctx += " Low funding rate — potential bounce."
+        fund_ctx += " Low funding rate â€” potential bounce."
     if not fund_ctx:
         fund_ctx = "Fundamental indicators are neutral."
 
@@ -831,13 +831,13 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                                       coin_display: str, volume_24h: float = 0) -> list:
     """Analyze ALL 3 timeframes (15min scalping, 1h swing, 1d long) and return signals for each that triggers.
     
-    This is the PRIMARY analysis — each signal is tagged with its REAL timeframe.
+    This is the PRIMARY analysis â€” each signal is tagged with its REAL timeframe.
     0 extra OHLC calls if we already have 1h data; otherwise 3 calls per coin.
     """
     extras = []
     ohlc_1h = None
     
-    # 1. SWING (1h timeframe) — most common, baseline
+    # 1. SWING (1h timeframe) â€” most common, baseline
     ohlc_1h = fetch_coingecko_ohlc(cg_id, "1h")
     if ohlc_1h is not None and len(ohlc_1h) >= 20:
         swing = calculate_indicators(ohlc_1h, volume_24h=volume_24h)
@@ -950,7 +950,7 @@ def generate_weekly_summary(supabase_client) -> Optional[str]:
         coins = list(set(s['coin'] for s in sigs.data))
         win_rate = f"{wins/(wins+losses)*100:.0f}%" if wins+losses > 0 else "N/A"
 
-        content = f"""## Weekly Market Summary — {datetime.now(timezone.utc).strftime('%B %d, %Y')}
+        content = f"""## Weekly Market Summary â€” {datetime.now(timezone.utc).strftime('%B %d, %Y')}
 
 This week, NOIRAX generated {total} trading signals across {len(coins)} different cryptocurrencies.
 
@@ -978,12 +978,12 @@ NOIRAX analyzes coins across three time horizons:
 
 This multi-timeframe approach captures opportunities at different market rhythms.
 
-*Educational content — not financial advice. Trading involves risk of loss.*"""
+*Educational content â€” not financial advice. Trading involves risk of loss.*"""
 
         slug = f"weekly-summary-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
         post_data = {
             "slug": slug,
-            "title": f"Weekly Market Summary — {datetime.now(timezone.utc).strftime('%B %d, %Y')}",
+            "title": f"Weekly Market Summary â€” {datetime.now(timezone.utc).strftime('%B %d, %Y')}",
             "content": content,
             "excerpt": f"This week: {total} signals, {wins} wins, {losses} losses across {len(coins)} coins.",
             "published_at": datetime.now(timezone.utc).isoformat(),
