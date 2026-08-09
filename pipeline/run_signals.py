@@ -683,8 +683,30 @@ def generate_fallback_explanations(coin: str, analysis: dict, fund_result: dict)
 
 
 def insert_signal(supabase_client, signal_data: dict) -> bool:
-    """Insert a signal into Supabase."""
+    """Insert a signal into Supabase.
+
+    Dedup + cooldown: skips insertion while an unresolved (pending) signal for
+    the same coin + signal_type + timeframe already exists, so the track record
+    is not inflated by re-emissions of the same signal on every pipeline run.
+    """
     try:
+        coin = signal_data.get("coin", "")
+        signal_type = signal_data.get("signal_type", "")
+        timeframe = signal_data.get("timeframe", "")
+        existing = (
+            supabase_client.table("signals")
+            .select("id")
+            .eq("coin", coin)
+            .eq("signal_type", signal_type)
+            .eq("timeframe", timeframe)
+            .eq("resolved_result", "pending")
+            .limit(1)
+            .execute()
+        )
+        rows = existing.data if hasattr(existing, "data") else []
+        if rows:
+            logger.info(f"Dedup: active {signal_type} signal already exists for {coin} ({timeframe}) â€” skipping")
+            return False
         supabase_client.table("signals").insert(signal_data).execute()
         logger.info(f"Signal inserted: {signal_data['coin']} {signal_data['signal_type']}")
         return True
@@ -969,12 +991,67 @@ This multi-timeframe approach captures opportunities at different market rhythms
         return None
 
 
+def _iter_pending_signals(supabase_client, budget_seconds: int = 240):
+    """Yield ALL pending signals oldest-first (FIFO), paged.
+
+    PostgREST only returns ~10 rows when no explicit limit/range is given, so
+    the old code kept re-processing the same oldest signals and never verified
+    newer ones. This generator pages through every pending signal in created_at
+    order, stopping once the wall-clock budget is exhausted (the pipeline job
+    has a 10-minute timeout and also needs time for signal generation).
+    """
+    page_size = 50
+    offset = 0
+    start = time.time()
+    while time.time() - start < budget_seconds:
+        page = (
+            supabase_client.table("signals")
+            .select("*")
+            .eq("resolved_result", "pending")
+            .order("created_at", ascending=True)
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+        signals = page.data if hasattr(page, "data") else []
+        if not signals:
+            return
+        offset += page_size
+        for signal in signals:
+            if time.time() - start >= budget_seconds:
+                return
+            yield signal
+
+
 def verify_past_signals(supabase_client) -> int:
-    """Check past pending signals against OHLC high/low range (not snapshot price)."""
+    """Check past pending signals against OHLC high/low range (not snapshot price).
+
+    Runs an expiry pass first: pending signals older than SIGNALS_MAX_AGE_DAYS
+    are marked 'expired' instead of lingering forever in the track record.
+    """
+    # Mejora 6: expire stale signals
     try:
-        pending = supabase_client.table("signals").select("*").eq("resolved_result", "pending").execute()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=SIGNALS_MAX_AGE_DAYS)).isoformat()
+        stale = (
+            supabase_client.table("signals")
+            .select("id")
+            .eq("resolved_result", "pending")
+            .lt("created_at", cutoff)
+            .execute()
+        )
+        stale_rows = stale.data if hasattr(stale, "data") else []
+        for s in stale_rows:
+            supabase_client.table("signals").update({
+                "resolved_result": "expired",
+                "resolved_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", s["id"]).execute()
+        if stale_rows:
+            logger.info(f"Expired {len(stale_rows)} stale pending signals (older than {SIGNALS_MAX_AGE_DAYS} days)")
+    except Exception as e:
+        logger.warning(f"Signal expiry pass failed: {e}")
+
+    try:
         verified = 0
-        for signal in pending.data if hasattr(pending, 'data') else []:
+        for signal in _iter_pending_signals(supabase_client):
             try:
                 coin_cg_id = signal.get("coingecko_id", "")
                 if not coin_cg_id:
@@ -1233,10 +1310,16 @@ def main():
                     continue
 
             # Fundamental analysis (all 4 sources)
-            if binance_blocked:
+            if market_data_blocked:
                 fund_result = analyze_fundamental(coin_symbol, coin_data.get("name", ""), coin_data)
             else:
                 fund_result = analyze_fundamental(coin_symbol)
+
+            # Hard block: never emit a signal for a coin with critical news
+            # (delisting, bankruptcy, exploit, hack alerts)
+            if "NEWS_CRITICAL" in (fund_result.get("tags") or []):
+                logger.warning(f"Skipping {coin_symbol}: NEWS_CRITICAL detected (delisting/hack/exploit risk)")
+                continue
 
             # Adjust confidence based on fundamental alignment
             fund_score = fund_result["score"]
