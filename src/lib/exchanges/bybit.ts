@@ -1,7 +1,7 @@
 // Bybit adapter. Auth: hex HMAC-SHA256 over "ts + apiKey + recvWindow + query".
 // Docs: https://bybit-exchange.github.io/docs/v5/authentication
 import { hmacHex, httpGet } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const bybit: ExchangeAdapter = {
   id: 'bybit',

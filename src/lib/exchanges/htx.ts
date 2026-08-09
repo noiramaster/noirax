@@ -1,7 +1,7 @@
 // HTX (Huobi) adapter. Auth: AWS-style signature v2 with canonical query.
 // Docs: https://huobiapi.github.io/docs/spot/v1/en/#request-signature
 import { encodeRFC3986, hmacB64, httpGet } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const htx: ExchangeAdapter = {
   id: 'htx',

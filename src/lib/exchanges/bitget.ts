@@ -2,7 +2,7 @@
 // Requires the API passphrase set at key creation.
 // Docs: https://www.bitget.com/docs/spot/restapi/
 import { hmacB64, httpGet } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const bitget: ExchangeAdapter = {
   id: 'bitget',

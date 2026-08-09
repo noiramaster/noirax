@@ -1,7 +1,7 @@
 // Binance adapter. Auth: HMAC-SHA256 signature over the query string.
 // Docs: https://developers.binance.com/docs/binance-spot-api-docs/rest-api
 import { hmacHex, httpGet } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const binance: ExchangeAdapter = {
   id: 'binance',

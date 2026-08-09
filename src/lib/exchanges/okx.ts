@@ -1,7 +1,7 @@
 // OKX adapter. Auth: base64 HMAC-SHA256 over "ts + method + path", passphrase required.
 // Docs: https://www.okx.com/docs-v5/en/#rest-api-authentication
 import { hmacB64, httpGet } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const okx: ExchangeAdapter = {
   id: 'okx',

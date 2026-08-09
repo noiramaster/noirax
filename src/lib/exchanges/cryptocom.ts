@@ -3,7 +3,7 @@
 // Docs: https://exchange-docs.crypto.com/rest/index.html#section/Authentication
 import { randomUUID } from 'crypto';
 import { hmacB64, httpPost } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const cryptocom: ExchangeAdapter = {
   id: 'cryptocom',

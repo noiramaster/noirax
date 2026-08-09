@@ -1,7 +1,7 @@
 // Gate.io adapter. Auth: SIGN = hex(HMAC-SHA512(secret, SHA512(query + body + ts)))
 // Docs: https://www.gate.io/docs/developers/apiv4/en/
 import { hmacSha512Hex, httpGet, sha512Hex } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const gate: ExchangeAdapter = {
   id: 'gate',

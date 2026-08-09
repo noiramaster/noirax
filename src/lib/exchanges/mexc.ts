@@ -2,7 +2,7 @@
 // both in the query and the X-MEXC-TIMESTAMP header.
 // Docs: https://mexcdevelop.github.io/apidocs/spot_v3_en/
 import { hmacHex, httpGet } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const mexc: ExchangeAdapter = {
   id: 'mexc',

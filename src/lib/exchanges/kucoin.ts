@@ -2,7 +2,7 @@
 // Requires the API passphrase set at key creation.
 // Docs: https://www.kucoin.com/docs/rest/authentication
 import { hmacB64, httpGet } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const kucoin: ExchangeAdapter = {
   id: 'kucoin',

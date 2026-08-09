@@ -1,7 +1,7 @@
 // Kraken adapter. Auth: base64 HMAC-SHA512 over "SHA256(nonce+postdata) + path".
 // Docs: https://docs.kraken.com/rest/#section/Authentication
 import { hmacSha512B64, httpPost, sha256Raw } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const kraken: ExchangeAdapter = {
   id: 'kraken',

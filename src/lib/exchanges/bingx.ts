@@ -1,7 +1,7 @@
 // BingX adapter. Auth: base64 HMAC-SHA256 over "timestamp + queryString".
 // Docs: https://bingx-api.github.io/docs/
 import { hmacB64, httpGet } from './signing';
-import type { ExchangeAdapter, TestResult } from './types';
+import type { ExchangeAdapter } from './types';
 
 const bingx: ExchangeAdapter = {
   id: 'bingx',
