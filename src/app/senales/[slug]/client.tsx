@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
 import { getLang, t, isRTL } from '@/lib/i18n';
 import TermTooltip from '@/components/TermTooltip';
+import TradingViewChart from '@/components/TradingViewChart';
 import Link from 'next/link';
 import type { Signal } from '@/lib/types';
 
@@ -22,54 +22,12 @@ export default function SignalDetailClient({ signal }: SignalDetailClientProps) 
   const isBuy = signal.signal_type === 'buy';
   const accentColor = isBuy ? 'text-accent-green' : 'text-accent-red';
   const explanation = (signal as any)[`explanation_${lang}`] || signal.explanation_en || '';
-  const chartRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    // Load lightweight chart
-    if (chartRef.current && typeof window !== 'undefined') {
-      import('lightweight-charts').then(({ createChart, LineSeries }) => {
-        const chart = createChart(chartRef.current!, {
-          width: chartRef.current!.clientWidth,
-          height: 300,
-          layout: {
-            background: { color: '#000000' },
-            textColor: '#666666',
-          },
-          grid: {
-            vertLines: { color: '#222222' },
-            horzLines: { color: '#222222' },
-          },
-          crosshair: {
-            mode: 0,
-          },
-          timeScale: {
-            borderColor: '#222222',
-          },
-        });
-
-        const lineSeries = chart.addSeries(LineSeries, {
-          color: '#39FF14',
-          lineWidth: 2,
-        });
-
-        // Sample data - in production this would come from API
-        const now = Math.floor(Date.now() / 1000);
-        const data = [];
-        for (let i = 100; i >= 0; i--) {
-          data.push({
-            time: (now - i * 3600) as any,
-            value: (signal.entry_price || 50000) * (1 + (Math.random() - 0.5) * 0.02),
-          });
-        }
-        lineSeries.setData(data);
-
-        // Mark entry would go here with the current version's API
-        // lineSeries.setMarkers(...) was removed; we show entry zone in the UI below
-
-        chart.timeScale().fitContent();
-      });
-    }
-  }, [signal]);
+  // TradingView symbol for the chart. VISUALIZATION ONLY: the widget is a
+  // market chart for the user; the NOIRAX analysis itself comes from the
+  // Bybit/OKX APIs (pipeline), never from this widget.
+  const baseCoin = (signal.coin || '').split('/')[0].replace('USDT', '');
+  const tvSymbol = baseCoin ? `BYBIT:${baseCoin}USDT` : 'BYBIT:BTCUSDT';
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12" dir={rtl ? 'rtl' : 'ltr'}>
@@ -102,8 +60,13 @@ export default function SignalDetailClient({ signal }: SignalDetailClientProps) 
           )}
         </div>
 
-        {/* Price Chart */}
-        <div ref={chartRef} className="w-full mb-6 border border-border rounded" />
+        {/* Price Chart — TradingView widget (visualization only, see component docs) */}
+        <div className="mb-1">
+          <TradingViewChart symbol={tvSymbol} locale={lang} />
+        </div>
+        <p className="text-[10px] text-muted font-mono mb-6">
+          {t('signal.chartNote', lang)}
+        </p>
 
         {/* Entry Zone */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
