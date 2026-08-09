@@ -42,6 +42,13 @@ TOP_COINS_FREE = int(os.environ.get("TECH_TOP_COINS_FREE", "0"))
 DEFAULT_TIMEFRAME = "1h"
 GEMINI_MODEL = "models/gemini-2.5-flash-lite"
 
+# Signal quality gates (Mejoras 4-7; env-configurable, sensible defaults)
+MIN_CONFIDENCE = int(os.environ.get("TECH_MIN_CONFIDENCE", "40"))
+MARKET_REGIME_DOWN_PCT = abs(float(os.environ.get("TECH_REGIME_DOWN_PCT", "2.0")))
+MARKET_REGIME_UP_PCT = abs(float(os.environ.get("TECH_REGIME_UP_PCT", "2.0")))
+SIGNALS_MAX_AGE_DAYS = int(os.environ.get("SIGNALS_MAX_AGE_DAYS", "7"))
+GEMINI_MAX_WAIT_SECONDS = int(os.environ.get("GEMINI_MAX_WAIT_SECONDS", "30"))
+
 # Proprietary technical parameters (from GitHub Secrets / env)
 RSI_OVERSOLD = int(os.environ.get("TECH_RSI_OVERSOLD", "0"))
 RSI_OVERBOUGHT = int(os.environ.get("TECH_RSI_OVERBOUGHT", "100"))
@@ -606,10 +613,10 @@ Return ONLY valid JSON, no markdown."""
             )
             if resp.status_code == 429:
                 if attempt == 0:
-                    logger.warning("Gemini 429, waiting 120s then retrying...")
-                    time.sleep(120)
+                    logger.warning(f"Gemini 429, waiting {GEMINI_MAX_WAIT_SECONDS}s then retrying...")
+                    time.sleep(GEMINI_MAX_WAIT_SECONDS)
                     continue
-                logger.warning("Gemini still rate-limited after 120s, using fallback")
+                logger.warning(f"Gemini still rate-limited after {GEMINI_MAX_WAIT_SECONDS}s, using fallback")
                 return None
             if resp.status_code != 200:
                 logger.warning(f"Gemini API error {resp.status_code}: {resp.text[:200]}")
@@ -1285,6 +1292,13 @@ def main():
     free_coins = [c["symbol"] for c in coins[:TOP_COINS_FREE]]
     premium_coins = [c["symbol"] for c in coins[TOP_COINS_FREE:]]
 
+    # Mejora 5: market regime from BTC's 24h move (CoinGecko data already loaded)
+    btc_change_24h = 0.0
+    btc_data = coin_dict.get("BTCUSDT")
+    if btc_data:
+        btc_change_24h = btc_data.get("price_change_percentage_24h", 0) or 0
+    logger.info(f"Market regime: BTC 24h change = {btc_change_24h:.2f}% (down gate {MARKET_REGIME_DOWN_PCT}%, up gate {MARKET_REGIME_UP_PCT}%)")
+
     all_analyses = []
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -1332,8 +1346,22 @@ def main():
             elif fund_score > 0 and analysis["signal_type"] == "sell":
                 analysis["confidence"] = max(5, analysis["confidence"] - 10)
 
+            # Mejora 4: minimum confidence gate — weak signals are skipped
+            if analysis["confidence"] < MIN_CONFIDENCE:
+                logger.info(f"Skipping {coin_symbol}: confidence {analysis['confidence']}% < {MIN_CONFIDENCE}%")
+                continue
+
+            # Mejora 5: market regime filter — no buys in a falling market,
+            # no sells in a rising one
+            if btc_change_24h < -MARKET_REGIME_DOWN_PCT and analysis["signal_type"] == "buy":
+                logger.info(f"Skipping {coin_symbol}: buy suppressed, market down {btc_change_24h:.1f}%")
+                continue
+            if btc_change_24h > MARKET_REGIME_UP_PCT and analysis["signal_type"] == "sell":
+                logger.info(f"Skipping {coin_symbol}: sell suppressed, market up {btc_change_24h:.1f}%")
+                continue
+
             # Enhance with real OHLC data for signal coins only
-            if binance_blocked:
+            if market_data_blocked:
                 cg_id = coin_data.get("coingecko_id", "")
                 if cg_id:
                     vol_24h = coin_data.get("volume_24h", 0) or 0
