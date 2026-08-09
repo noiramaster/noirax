@@ -3,10 +3,10 @@ NOIRAX Fundamental Analysis Module
 Free, no API keys required. Adapts OmniBot v4 patterns for signal generation.
 
 4 sources:
-  1. News sentiment (RSS: CoinTelegraph + BitcoinMagazine)
+  1. News sentiment (RSS: CoinTelegraph + BitcoinMagazine + CoinDesk)
   2. Whale detection (blockchain.info — BTC ONLY, documented limitation)
-  3. Funding rates (Binance Futures public endpoint)
-  4. Volume anomalies (Binance 24hr ticker)
+  3. Funding rates (Bybit futures, OKX fallback — Binance Futures is geo-blocked from GitHub Actions)
+  4. Volume anomalies (Bybit 24hr ticker, CoinGecko fallback)
 
 All combined into a single score (-2 to +2) with descriptive tags.
 """
@@ -53,9 +53,6 @@ RSS_FEEDS = [
 ]
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (NOIRAX Signal Bot; educational)"}
-
-# Binance Futures funding rate endpoint
-BINANCE_FUTURES_BASE = "https://fapi.binance.com"
 
 logger.info("Fundamental analysis module loaded")
 
@@ -204,7 +201,7 @@ def _detect_whale_activity(symbol: str) -> tuple[int, list[str]]:
 
 
 # ============================================================
-# 3. FUNDING RATES (Binance Futures)
+# 3. FUNDING RATES (Bybit futures, OKX fallback)
 # ============================================================
 
 def _check_funding_rate(symbol: str) -> tuple[int, list[str]]:
@@ -257,67 +254,31 @@ def _check_funding_rate(symbol: str) -> tuple[int, list[str]]:
         logger.debug(f"Alternative funding rate error for {symbol}: {e}")
     logger.info(f"Funding rate unavailable for {symbol} (all sources blocked)")
     return 0, []
-    """
-    Check current funding rate from Binance Futures.
-    High positive = longs paying shorts (overleveraged longs → bearish signal)
-    High negative = shorts paying longs (overleveraged shorts → bullish signal)
-    """
-    try:
-        resp = _safe_request(
-            f"{BINANCE_FUTURES_BASE}/fapi/v1/premiumIndex",
-            params={"symbol": symbol},
-            timeout=8,
-        )
-        if resp is None:
-            return 0, []
-
-        data = resp.json()
-        funding_rate = float(data.get("lastFundingRate", 0))
-
-        # Binance funding rate is typically 0.01% (0.0001)
-        # > 0.05% (0.0005) is high
-        # < -0.05% (-0.0005) is high negative
-        tags = []
-        score = 0
-
-        if funding_rate > FUNDING_RATE_HIGH:
-            # Overleveraged longs → potential squeeze down
-            score = -1
-            tags.append("FUNDING_RATE_HIGH")
-        elif funding_rate < FUNDING_RATE_LOW:
-            # Overleveraged shorts → potential squeeze up
-            score = 1
-            tags.append("FUNDING_RATE_LOW")
-        elif funding_rate > FUNDING_RATE_ELEVATED:
-            score = 0  # Neutral-high, noted but no score impact
-            tags.append("FUNDING_RATE_ELEVATED")
-
-        return score, tags
-
-    except Exception as e:
-        logger.debug(f"Funding rate check error for {symbol}: {e}")
-        return 0, []
 
 
 # ============================================================
-# 4. VOLUME ANOMALIES (Binance 24hr ticker)
+# 4. VOLUME ANOMALIES (Bybit 24hr ticker, CoinGecko fallback)
 # ============================================================
 
 def _check_volume_anomaly(symbol: str) -> tuple[int, list[str]]:
-    """Detect unusual volume using Binance 24hr ticker (may be geo-blocked from GitHub Actions)."""
+    """Detect unusual volume using Bybit 24hr ticker (works from GitHub Actions, no geo-block)."""
     try:
         resp = _safe_request(
-            "https://api.binance.com/api/v3/ticker/24hr",
-            params={"symbol": symbol},
+            "https://api.bybit.com/v5/market/tickers",
+            params={"category": "spot", "symbol": symbol},
             timeout=8,
         )
         if resp is None:
             return 0, []
 
         data = resp.json()
-        volume = float(data.get("volume", 0))
-        quote_volume = float(data.get("quoteVolume", 0))
-        price_change_pct = float(data.get("priceChangePercent", 0))
+        if data.get("retCode") != 0:
+            return 0, []
+        ticker = data.get("result", {}).get("list", [{}])[0]
+        # Bybit fields: turnover24h = quote volume (USDT), volume24h = base volume,
+        # price24hPcnt = fractional 24h price change (e.g. 0.0123 = +1.23%)
+        quote_volume = float(ticker.get("turnover24h", 0))
+        price_change_pct = float(ticker.get("price24hPcnt", 0)) * 100
 
         tags = []
         score = 0
@@ -369,13 +330,13 @@ def analyze_fundamental(symbol: str, coin_name: str = "", coin_data: Optional[di
     Args:
         symbol: Trading pair symbol (e.g. "BTCUSDT")
         coin_name: Human-readable coin name for RSS search
-        coin_data: CoinGecko market data dict (optional, used for volume anomaly when Binance blocked)
+        coin_data: CoinGecko market data dict (optional, used for volume anomaly when Bybit is blocked)
     """
     news_score, news_tags = _analyze_news_sentiment(symbol, coin_name)
     whale_score, whale_tags = _detect_whale_activity(symbol)
     funding_score, funding_tags = _check_funding_rate(symbol)
     
-    # Volume anomaly: try Binance first, fall back to CoinGecko data
+    # Volume anomaly: try Bybit first, fall back to CoinGecko data
     volume_score, volume_tags = _check_volume_anomaly(symbol)
     if volume_score == 0 and not volume_tags and coin_data:
         cg_volume = coin_data.get("volume_24h", 0) or 0

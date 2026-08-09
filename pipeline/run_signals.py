@@ -24,8 +24,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("noirax-pipeline")
 
 # --- Configuration ---
-BINANCE_BASE = os.environ.get("BINANCE_BASE", "https://api.binance.com")
-BINANCE_FALLBACKS = ["https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com"]
+# Technical market data comes from Bybit (primary) and OKX (fallback).
+# Both expose public OHLCV endpoints that work from GitHub Actions runners
+# (Binance returns HTTP 451 / geo-blocks US datacenter IPs). CoinGecko OHLC
+# remains a last-resort fallback inside get_klines().
+BYBIT_BASE = os.environ.get("BYBIT_BASE", "https://api.bybit.com")
+OKX_BASE = os.environ.get("OKX_BASE", "https://www.okx.com")
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 COINGECKO_API_KEY = os.environ.get("COINGECKO_API_KEY", "")
 CG_AUTH = f"?x_cg_demo_api_key={COINGECKO_API_KEY}" if COINGECKO_API_KEY else ""
@@ -63,66 +67,118 @@ ATR_TP3_OPTIMIZED = float(os.environ.get("TECH_ATR_TP3_OPTIMIZED", "1.0"))
 
 SUPPORTED_LANGS = ["en", "es", "pt", "fr", "de", "it", "ar"]
 
-# Valid Binance symbols cache (populated on first use)
-_VALID_BINANCE_SYMBOLS: Optional[set] = None
+# Valid Bybit spot symbols cache (populated on first use)
+_VALID_BYBIT_SYMBOLS: Optional[set] = None
+
+# Interval codes per exchange: {"our": (bybit_code, okx_code)}
+_INTERVAL_CODES = {
+    "15m": ("15", "15m"),
+    "1h": ("60", "1H"),
+    "4h": ("240", "4H"),
+    "1d": ("D", "1D"),
+}
 
 
-def _try_all_binance_hosts(endpoint: str, params: Optional[dict] = None, timeout: int = 30) -> Optional[dict]:
-    """Try Binance API across all hosts (main + fallbacks), return first success."""
-    hosts = [BINANCE_BASE] + BINANCE_FALLBACKS
-    last_error = None
-    for host in hosts:
-        url = f"{host}{endpoint}"
+def _safe_market_request(url: str, params: Optional[dict] = None, timeout: int = 15) -> Optional[dict]:
+    """GET JSON from a public market-data endpoint with one retry; None on failure.
+
+    Handles rate limiting (429) and geo-blocks (451) so the pipeline can move
+    on to the next data source instead of crashing.
+    """
+    for attempt in range(2):
         try:
             resp = requests.get(url, params=params, timeout=timeout)
-            if resp.status_code == 451:
-                logger.debug(f"451 on {host}{endpoint[:30]} — trying alternate host")
-                continue
             if resp.status_code == 429:
+                wait = 2 ** attempt * 5
+                logger.warning(f"Rate limited on {url[:60]}, waiting {wait}s...")
+                time.sleep(wait)
                 continue
+            if resp.status_code == 451:
+                logger.debug(f"451 on {url[:60]} â€” geo-blocked, trying next source")
+                return None
             resp.raise_for_status()
             return resp.json()
         except requests.RequestException as e:
-            last_error = e
-            logger.debug(f"Failed {host}: {e}")
-            continue
-    if last_error:
-        raise last_error
+            logger.debug(f"Request failed {url[:60]}: {e}")
+            if attempt == 0:
+                time.sleep(2)
     return None
 
 
-def _get_valid_binance_symbols() -> set:
-    """Fetch valid Binance spot symbols from exchangeInfo. Cached."""
-    global _VALID_BINANCE_SYMBOLS
-    if _VALID_BINANCE_SYMBOLS is not None:
-        return _VALID_BINANCE_SYMBOLS
+def _get_bybit_valid_symbols() -> set:
+    """Fetch valid Bybit spot symbols (cached). Returns empty set on failure."""
+    global _VALID_BYBIT_SYMBOLS
+    if _VALID_BYBIT_SYMBOLS is not None:
+        return _VALID_BYBIT_SYMBOLS
     try:
-        data = _try_all_binance_hosts("/api/v3/exchangeInfo", timeout=30)
-        if data:
-            _VALID_BINANCE_SYMBOLS = {s["symbol"] for s in data.get("symbols", []) if s.get("status") == "TRADING"}
-            logger.info(f"Loaded {len(_VALID_BINANCE_SYMBOLS)} valid Binance symbols")
-        else:
-            raise ValueError("All hosts failed")
+        data = _safe_market_request(
+            f"{BYBIT_BASE}/v5/market/instruments-info",
+            {"category": "spot", "limit": 1000},
+        )
+        symbols = set()
+        if data and data.get("retCode") == 0:
+            for item in data.get("result", {}).get("list", []):
+                if item.get("status") == "Trading":
+                    symbols.add(item.get("symbol", ""))
+        _VALID_BYBIT_SYMBOLS = symbols
+        logger.info(f"Loaded {len(_VALID_BYBIT_SYMBOLS)} valid Bybit spot symbols")
     except Exception as e:
-        logger.warning(f"Failed to load exchangeInfo, using fallback: {e}")
-        _VALID_BINANCE_SYMBOLS = set()
-    return _VALID_BINANCE_SYMBOLS
+        logger.warning(f"Failed to load Bybit instruments: {e}")
+        _VALID_BYBIT_SYMBOLS = set()
+    return _VALID_BYBIT_SYMBOLS
 
 
-def binance_request(endpoint: str, params: Optional[dict] = None) -> dict:
-    """Make request to Binance API with retry and exponential backoff across all hosts."""
-    for attempt in range(3):
-        try:
-            return _try_all_binance_hosts(endpoint, params, timeout=30) or {}
-        except requests.RequestException as e:
-            if attempt < 2:
-                wait = 2 ** attempt * 5
-                logger.warning(f"Request failed ({e}), retrying in {wait}s...")
-                time.sleep(wait)
-            else:
-                logger.error(f"Request failed after 3 attempts: {e}")
-                return {}
-    return {}
+def bybit_klines(symbol: str, interval: str = "1h", limit: int = 200) -> Optional[pd.DataFrame]:
+    """Fetch OHLCV candles from Bybit spot (primary market data source)."""
+    bybit_interval = _INTERVAL_CODES.get(interval, ("60", "1H"))[0]
+    data = _safe_market_request(
+        f"{BYBIT_BASE}/v5/market/kline",
+        {"category": "spot", "symbol": symbol, "interval": bybit_interval, "limit": limit},
+    )
+    if not data or data.get("retCode") != 0:
+        return None
+    rows = data.get("result", {}).get("list", [])
+    if not rows:
+        return None
+    candles = []
+    for r in rows:
+        if len(r) < 6:
+            continue
+        candles.append({
+            "timestamp": pd.to_datetime(int(r[0]), unit="ms"),
+            "open": float(r[1]), "high": float(r[2]),
+            "low": float(r[3]), "close": float(r[4]), "volume": float(r[5]),
+        })
+    if not candles:
+        return None
+    return pd.DataFrame(candles)
+
+
+def okx_klines(symbol: str, interval: str = "1h", limit: int = 200) -> Optional[pd.DataFrame]:
+    """Fetch OHLCV candles from OKX spot (fallback source). Symbol is BASE-USDT format."""
+    okx_interval = _INTERVAL_CODES.get(interval, ("60", "1H"))[1]
+    okx_symbol = symbol.replace("USDT", "-USDT") if "USDT" in symbol else symbol
+    data = _safe_market_request(
+        f"{OKX_BASE}/api/v5/market/candles",
+        {"instId": okx_symbol, "bar": okx_interval, "limit": limit},
+    )
+    if not data or data.get("code") != "0":
+        return None
+    rows = data.get("data", [])
+    if not rows:
+        return None
+    candles = []
+    for r in rows:
+        if len(r) < 6 or (len(r) > 8 and r[8] != "1"):
+            continue
+        candles.append({
+            "timestamp": pd.to_datetime(int(r[0]), unit="ms"),
+            "open": float(r[1]), "high": float(r[2]),
+            "low": float(r[3]), "close": float(r[4]), "volume": float(r[5]),
+        })
+    if not candles:
+        return None
+    return pd.DataFrame(candles)
 
 
 def get_top_coins(limit: int = 50) -> list:
@@ -170,23 +226,19 @@ def get_top_coins(limit: int = 50) -> list:
 
 
 def get_klines(symbol: str, interval: str = "1h", limit: int = 200, coingecko_id: Optional[str] = None) -> pd.DataFrame:
-    """Fetch OHLCV klines from Binance, falls back to CoinGecko OHLC if Binance is blocked."""
-    data = binance_request("/api/v3/klines", {
-        "symbol": symbol,
-        "interval": interval,
-        "limit": limit,
-    })
-    if data:
-        df = pd.DataFrame(data, columns=[
-            "timestamp", "open", "high", "low", "close", "volume",
-            "close_time", "quote_asset_volume", "number_of_trades",
-            "taker_buy_base_vol", "taker_buy_quote_vol", "ignore"
-        ])
-        df = df[["timestamp", "open", "high", "low", "close", "volume"]]
-        for col in ["open", "high", "low", "close", "volume"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+    """Fetch OHLCV klines: Bybit first, OKX as fallback, CoinGecko OHLC last resort.
+
+    Returns an empty DataFrame only if all sources fail. The returned data is
+    used exclusively for technical analysis — Binance is no longer a data source
+    (it geo-blocks US datacenter IPs used by GitHub Actions).
+    """
+    df = bybit_klines(symbol, interval, limit)
+    if df is not None and len(df) >= 20:
         return df
+    df = okx_klines(symbol, interval, limit)
+    if df is not None and len(df) >= 20:
+        return df
+    logger.info(f"Bybit & OKX unavailable for {symbol} â€” falling back to CoinGecko OHLC")
 
     # Fallback: try CoinGecko OHLC (frees data source that works from GitHub Actions)
     if coingecko_id:
@@ -642,7 +694,7 @@ def insert_signal(supabase_client, signal_data: dict) -> bool:
 
 
 def calculate_simple_signal(coin: dict) -> Optional[dict]:
-    """Generate signal from CoinGecko market data (used when Binance is blocked)."""
+    """Generate signal from CoinGecko market data (used when market data sources are blocked)."""
     price = coin.get("current_price", 0)
     change_24h = coin.get("price_change_percentage_24h", 0) or 0
     change_7d = coin.get("price_change_percentage_7d_in_currency") or change_24h or 0
@@ -1119,25 +1171,28 @@ def main():
     else:
         logger.warning("Supabase not configured - running in dry-run mode")
 
-    # Get top coins — expanded universe for all duration categories
+    # Get top coins â€” expanded universe for all duration categories
     coins = get_top_coins(limit=100 if COINGECKO_API_KEY else 50)
 
-    # Filter to only valid Binance symbols (skip filter if exchangeInfo unavailable)
-    valid_symbols = _get_valid_binance_symbols()
+    # Filter to only valid Bybit spot symbols (skip filter if instruments unavailable)
+    valid_symbols = _get_bybit_valid_symbols()
     if valid_symbols:
         original_count = len(coins)
         coins = [c for c in coins if c["symbol"] in valid_symbols]
-        logger.info(f"Filtered {original_count} coins to {len(coins)} with valid Binance symbols")
+        logger.info(f"Filtered {original_count} coins to {len(coins)} with valid Bybit spot symbols")
     else:
-        logger.info("Binance exchangeInfo unavailable — skipping symbol filter, using all coins")
+        logger.info("Bybit instruments unavailable â€” skipping symbol filter, using all coins")
     logger.info(f"Found {len(coins)} coins with sufficient volume")
 
-    # Detect if Binance is geo-blocked (common on GitHub Actions)
-    binance_blocked = False
-    test_data = binance_request("/api/v3/klines", {"symbol": "BTCUSDT", "interval": "1h", "limit": 3})
-    if not test_data:
-        binance_blocked = True
-        logger.info("Binance API blocked — using simplified analysis from CoinGecko market data")
+    # Detect if the primary market-data sources are blocked (Bybit, then OKX).
+    # Only when BOTH fail do we degrade to simplified CoinGecko analysis.
+    market_data_blocked = bybit_klines("BTCUSDT", DEFAULT_TIMEFRAME, 3) is None
+    if market_data_blocked:
+        market_data_blocked = okx_klines("BTCUSDT", DEFAULT_TIMEFRAME, 3) is None
+        if not market_data_blocked:
+            logger.info("Bybit blocked, OKX reachable â€” per-coin fallback inside get_klines() will handle the rest")
+    if market_data_blocked:
+        logger.info("Bybit & OKX both blocked â€” using simplified analysis from CoinGecko market data")
         # Expand coin universe based on API key availability
         if COINGECKO_API_KEY:
             max_analysis_coins = min(len(coins), 100)
@@ -1160,7 +1215,7 @@ def main():
     for coin_symbol in free_coins + premium_coins:
         cg_id = coin_id_map.get(coin_symbol, "")
         try:
-            if binance_blocked:
+            if market_data_blocked:
                 # Simplified analysis using CoinGecko market data (bulk, no per-coin API calls)
                 coin_data = coin_dict.get(coin_symbol)
                 if not coin_data:
@@ -1169,7 +1224,7 @@ def main():
                 if analysis is None:
                     continue
             else:
-                # Full analysis using Binance OHLC klines
+                # Full analysis using Bybit/OKX OHLC klines
                 df = get_klines(coin_symbol, interval=DEFAULT_TIMEFRAME)
                 if df.empty or len(df) < 50:
                     continue
@@ -1214,7 +1269,7 @@ def main():
             # Multi-timeframe analysis: generate signals for 15min, 1h, and daily timeframes
             timeframe_signals = generate_multi_timeframe_signals(
                 coin_symbol, cg_id, tier, fund_result, timestamp, coin_display,
-                volume_24h=coin_data.get("volume_24h", 0) if binance_blocked and coin_data else 0
+                volume_24h=coin_data.get("volume_24h", 0) if market_data_blocked and coin_data else 0
             )
 
             if timeframe_signals:
@@ -1289,7 +1344,7 @@ def main():
 
         signal_data = {
             "coin": coin,
-            "exchange": "binance",
+            "exchange": "bybit",
             "signal_type": analysis["signal_type"],
             "confidence": analysis["confidence"],
             "explanation_en": explanations.get("en", ""),
