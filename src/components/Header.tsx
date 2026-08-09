@@ -32,6 +32,7 @@ export default function Header() {
           <Link href="/free" className="text-muted hover:text-foreground transition-colors">{t('nav.free', lang)}</Link>
           <Link href="/premium" className="text-muted hover:text-foreground transition-colors">{t('nav.premium', lang)}</Link>
           <Link href="/track-record" className="text-muted hover:text-foreground transition-colors">{t('nav.trackRecord', lang)}</Link>
+          <Link href="/trading" className="text-muted hover:text-foreground transition-colors">{t('trading.nav', lang)}</Link>
           <Link href="/pricing" className="text-muted hover:text-foreground transition-colors">{t('nav.pricing', lang)}</Link>
           {user ? (
             <>
@@ -69,6 +70,7 @@ export default function Header() {
             <Link href="/free" className="text-muted hover:text-foreground">{t('nav.free', lang)}</Link>
             <Link href="/premium" className="text-muted hover:text-foreground">{t('nav.premium', lang)}</Link>
             <Link href="/track-record" className="text-muted hover:text-foreground">{t('nav.trackRecord', lang)}</Link>
+            <Link href="/trading" className="text-muted hover:text-foreground">{t('trading.nav', lang)}</Link>
             <Link href="/pricing" className="text-muted hover:text-foreground">{t('nav.pricing', lang)}</Link>
             {user ? (
               <button onClick={() => supabase.auth.signOut()} className="text-left text-muted hover:text-accent-red">

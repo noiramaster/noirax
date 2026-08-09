@@ -3,6 +3,7 @@
 import { getLang, t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import { useState } from 'react';
+import Link from 'next/link';
 
 export default function PricingPage() {
   const lang = getLang();
@@ -107,6 +108,23 @@ export default function PricingPage() {
         * {t('legal.affiliateDisclaimer', lang)}<br />
         {t('legal.disclaimer', lang)}
       </p>
+
+      {/* Auto Trading — separate product, clearly distinct from the plans */}
+      <div className="mt-12 border border-border rounded p-6">
+        <h2 className="font-mono text-xl text-accent-green mb-2">&gt; {t('trading.title', lang)}</h2>
+        <p className="text-sm text-muted font-mono mb-4">
+          {t('trading.subtitle', lang)}
+        </p>
+        <p className="text-xs text-terminal-text font-mono mb-4">
+          {t('trading.dashboard.executionSoon', lang)}
+        </p>
+        <Link
+          href="/trading"
+          className="inline-block border border-accent-green text-accent-green px-4 py-2 rounded text-sm font-mono hover:bg-accent-green hover:text-black transition-colors"
+        >
+          {t('trading.connectAnother', lang)}
+        </Link>
+      </div>
     </div>
   );
 }
