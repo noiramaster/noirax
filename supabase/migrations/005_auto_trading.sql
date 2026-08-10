@@ -102,8 +102,8 @@ CREATE POLICY "Service role manages trades" ON public.auto_trades
 
 -- Defense in depth: the encrypted columns are never readable/writable by the
 -- authenticated role (only the application server with the service role).
-REVOKE SELECT ON public.exchange_connections (api_key_enc, api_secret_enc) FROM authenticated;
-REVOKE UPDATE ON public.exchange_connections (api_key_enc, api_secret_enc) FROM authenticated;
+REVOKE SELECT (api_key_enc, api_secret_enc) ON public.exchange_connections FROM authenticated;
+REVOKE UPDATE (api_key_enc, api_secret_enc) ON public.exchange_connections FROM authenticated;
 
 -- 6. Vault helper: reads EXCHANGE_MASTER_KEY from Supabase Vault.
 --    The application falls back to the EXCHANGE_MASTER_KEY env var when Vault
