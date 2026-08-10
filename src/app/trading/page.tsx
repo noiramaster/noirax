@@ -5,6 +5,7 @@ import { getLang, t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import ConnectWizard, { type TradingConfig } from '@/components/trading/ConnectWizard';
+import TradesPanel from '@/components/trading/TradesPanel';
 import { EXCHANGES, getExchangeInfo } from '@/lib/exchanges';
 import { RISK_PROFILES } from '@/lib/trading';
 import type { ExchangeConnection } from '@/lib/trading';
@@ -136,11 +137,18 @@ export default function TradingPage() {
           <span className="font-mono text-sm text-foreground flex-1">{info.name}</span>
           {already && <span className="text-[10px] border border-accent-green text-accent-green px-2 py-0.5 rounded font-mono">{t('trading.connected', lang)}</span>}
         </div>
-        <div className="flex items-center gap-1.5">
-          <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-muted font-mono underline hover:text-foreground">
-            {t('trading.noAccount', lang)} {info.name}? {t('trading.createHere', lang)}
-          </a>
-          {info.hasAffiliate && <span className="text-[9px] text-muted font-mono border border-border rounded px-1 py-0.5">{t('trading.affiliateLabel', lang)}</span>}
+        <div className="space-y-1.5 mt-1">
+          <div className="flex items-center gap-1.5">
+            <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-muted font-mono underline hover:text-foreground">
+              {t('trading.noAccount', lang)} {info.name}? {t('trading.createHere', lang)}
+            </a>
+            {info.hasAffiliate && <span className="text-[9px] text-muted font-mono border border-border rounded px-1 py-0.5">{t('trading.affiliateLabel', lang)}</span>}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <a href={info.apiKeyUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-muted font-mono underline hover:text-foreground">
+              {t('trading.haveAccountShort', lang)} — {t('trading.generateApiKey', lang)}
+            </a>
+          </div>
         </div>
         <div className="flex gap-2 mt-1">
           <a href={info.docsUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-muted font-mono hover:text-foreground">{t('trading.docs', lang)}</a>
@@ -149,7 +157,7 @@ export default function TradingPage() {
             disabled={already}
             className="ml-auto border border-accent-green text-accent-green px-3 py-1 rounded text-xs font-mono hover:bg-accent-green hover:text-black transition-colors cursor-pointer disabled:opacity-40"
           >
-            {already ? t('trading.connected', lang) : t('trading.securityGuide', lang)}
+            {already ? t('trading.connected', lang) : t('trading.configure', lang)}
           </button>
         </div>
       </div>
@@ -169,6 +177,7 @@ export default function TradingPage() {
           <ConnectWizard
             exchange={getExchangeInfo(selectedExchange)!}
             config={config}
+            signupUrl={affiliateLinks[selectedExchange] || getExchangeInfo(selectedExchange)?.signupUrl}
             onConnected={() => setSelectedExchange(null)}
             onBack={() => setSelectedExchange(null)}
           />
@@ -255,21 +264,11 @@ export default function TradingPage() {
               );
             })}
 
-            <p className="text-xs text-muted font-mono border border-border rounded p-3">
-              {t('trading.dashboard.executionSoon', lang)}
-            </p>
             <p className="text-xs text-muted font-mono">
               {t('trading.dashboard.commission', lang).replace('{rate}', String(Math.round((config.commissionRate || 0.25) * 100)))}
             </p>
 
-            <div className="border border-border rounded p-4">
-              <h3 className="font-mono text-sm text-accent-green mb-2">&gt; {t('trading.dashboard.activeTrades', lang)}</h3>
-              <p className="text-xs text-muted font-mono">{t('trading.dashboard.noActiveTrades', lang)}</p>
-            </div>
-            <div className="border border-border rounded p-4">
-              <h3 className="font-mono text-sm text-accent-green mb-2">&gt; {t('trading.dashboard.history', lang)}</h3>
-              <p className="text-xs text-muted font-mono">{t('trading.dashboard.noHistory', lang)}</p>
-            </div>
+            <TradesPanel />
 
             <button onClick={() => setConnections([])} className="text-xs text-muted font-mono underline hover:text-foreground">
               {t('trading.connectAnother', lang)}
