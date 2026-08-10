@@ -1,5 +1,16 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## NOIRAX — Auto Trading & Signal Platform
+
+- **Signal pipeline** (`pipeline/`): technical analysis from Bybit/OKX public market data (Binance geo-blocks datacenter IPs), fundamental analysis, weekly summaries. Runs every 10 minutes on GitHub Actions, triggered by an external cron pinger (cron-job.org -> workflow_dispatch).
+- **Auto trading** (`/trading`): users connect exchange API keys (AES-256-GCM encrypted with `EXCHANGE_MASTER_KEY`), choose an operation mode and a risk profile. Hard safety caps are enforced server-side. Order execution is a future phase.
+
+## Deployment prerequisites
+
+- **Vercel env vars** (production + preview): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `EXCHANGE_MASTER_KEY`, Stripe keys, `GEMINI_API_KEY`, `AI_PROVIDER`, `NEXT_PUBLIC_APP_URL`.
+- **Supabase**: migrations `supabase/migrations/*` applied; Vault enabled (Database -> Vault) with a secret named `exchange_master_key` (64 hex chars = 32 bytes). The app reads the key from Vault first, then falls back to the `EXCHANGE_MASTER_KEY` env var.
+- **Vercel Hobby note**: production deploys only pass when the commit author is linked to the Vercel account (see Vercel docs on project collaboration).
+
 ## Getting Started
 
 First, run the development server:
