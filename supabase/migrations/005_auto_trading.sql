@@ -108,7 +108,17 @@ REVOKE UPDATE (api_key_enc, api_secret_enc) ON public.exchange_connections FROM 
 -- 6. Vault helper: reads EXCHANGE_MASTER_KEY from Supabase Vault.
 --    The application falls back to the EXCHANGE_MASTER_KEY env var when Vault
 --    is not configured. Only the service role can execute this function.
-CREATE EXTENSION IF NOT EXISTS vault;
+--    Vault must be enabled in the Supabase dashboard (Database -> Vault) for
+--    the extension to exist; if it is not available yet, the rest of the
+--    migration still applies and Vault is picked up automatically once enabled.
+DO $$
+BEGIN
+  BEGIN
+    CREATE EXTENSION IF NOT EXISTS vault;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'vault extension unavailable — enable it in the Supabase dashboard (Database -> Vault)';
+  END;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.get_exchange_master_key()
 RETURNS TEXT
