@@ -20,15 +20,21 @@ interface ConnectWizardProps {
   config: TradingConfig;
   onConnected: () => void;
   onBack: () => void;
+  /** Affiliate/referral signup URL for the exchange (from affiliate_links), falls back to the official one. */
+  signupUrl?: string;
 }
 
-type Step = 'guide' | 'credentials' | 'mode' | 'profile' | 'brake' | 'legal' | 'done';
+// Onboarding order: the user configures EVERYTHING (mode, profile, brake, legal)
+// before ever being asked to paste API keys. Keys are the LAST step, so a user
+// without keys yet is never blocked: the two buttons below are shown before the
+// form at every point where keys are needed.
+type Step = 'mode' | 'profile' | 'brake' | 'legal' | 'credentials' | 'done';
 
 const PRESET_IDS: RiskProfile[] = ['conservative', 'moderate', 'aggressive', 'small_frequent'];
 
-export default function ConnectWizard({ exchange, config, onConnected, onBack }: ConnectWizardProps) {
+export default function ConnectWizard({ exchange, config, onConnected, onBack, signupUrl }: ConnectWizardProps) {
   const lang = getLang();
-  const [step, setStep] = useState<Step>('guide');
+  const [step, setStep] = useState<Step>('mode');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
   const [passphrase, setPassphrase] = useState('');
@@ -46,8 +52,8 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack }:
     : { positionPct: preset?.positionPct ?? 10, dailyLossLimitPct: preset?.dailyLossLimitPct ?? 5, maxPositions: preset?.maxPositions ?? 5 };
 
   const stepBar = (): string => {
-    const order: Step[] = ['guide', 'credentials', 'mode', 'profile', 'brake', 'legal'];
-    return `[${order.indexOf(step) + 1}/7]`;
+    const order: Step[] = ['mode', 'profile', 'brake', 'legal', 'credentials'];
+    return `[${order.indexOf(step) + 1}/5]`;
   };
 
   const handleConnect = async () => {
@@ -91,57 +97,40 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack }:
   const btnPrimary = 'border border-accent-green text-accent-green px-4 py-2 rounded text-sm font-mono hover:bg-accent-green hover:text-black transition-colors cursor-pointer disabled:opacity-50';
   const btnGhost = 'border border-border text-muted px-4 py-2 rounded text-sm font-mono hover:border-accent-green hover:text-foreground transition-colors cursor-pointer';
 
+  // Two clearly differentiated options depending on the user's situation:
+  //  A) new to the exchange -> signup (affiliate link when available)
+  //  B) already has an account -> go straight to the exchange's API-key page
+  const signupUrlResolved = signupUrl || exchange.signupUrl;
+  const twoButtonsBlock = (
+    <div className="border border-border rounded p-4 space-y-3">
+      <p className="text-xs text-muted font-mono">{t('trading.getKeysReminder', lang)}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="border border-border rounded p-3 flex flex-col gap-2">
+          <p className="text-xs text-foreground font-mono">{t('trading.noAccountShort', lang)}</p>
+          <p className="text-[11px] text-muted font-mono">{t('trading.noAccountDesc', lang).replace('{exchange}', exchange.name)}</p>
+          <div className="flex items-center gap-2">
+            <a href={signupUrlResolved} target="_blank" rel="noopener noreferrer" className={btnPrimary}>
+              {t('trading.createHere', lang)}
+            </a>
+            {exchange.hasAffiliate && (
+              <span className="text-[9px] text-muted font-mono border border-border rounded px-1 py-0.5">{t('trading.affiliateLabel', lang)}</span>
+            )}
+          </div>
+        </div>
+        <div className="border border-border rounded p-3 flex flex-col gap-2">
+          <p className="text-xs text-foreground font-mono">{t('trading.haveAccountShort', lang)}</p>
+          <p className="text-[11px] text-muted font-mono">{t('trading.haveAccountDesc', lang).replace('{exchange}', exchange.name)}</p>
+          <a href={exchange.apiKeyUrl} target="_blank" rel="noopener noreferrer" className={btnPrimary}>
+            {t('trading.generateApiKey', lang)}
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="max-w-3xl mx-auto">
       <p className="text-xs text-muted font-mono mb-4">{stepBar()} &gt; {exchange.name}</p>
-
-      {step === 'guide' && (
-        <div className="border border-border rounded p-6 space-y-4">
-          <h2 className="font-mono text-xl text-accent-green">&gt; {t('trading.stepGuide', lang)}</h2>
-          <p className="text-sm text-muted font-mono">{t('trading.guideIntro', lang)}</p>
-          <ul className="space-y-3 text-sm text-terminal-text font-mono">
-            <li className="flex gap-2"><span className="text-accent-green">&gt;</span> {t('trading.guideTradingOnly', lang)}</li>
-            <li className="flex gap-2"><span className="text-accent-red">&gt;</span> {t('trading.guideNoWithdraw', lang)}</li>
-            <li className="flex gap-2"><span className="text-accent-green">&gt;</span> {t('trading.guideIpWhitelist', lang)}</li>
-            {exchange.needsPassphrase && <li className="flex gap-2"><span className="text-accent-green">&gt;</span> {t('trading.guidePassphrase', lang)}</li>}
-            <li className="flex gap-2"><span className="text-accent-green">&gt;</span> {t('trading.guideNeverShare', lang)}</li>
-          </ul>
-          <div className="flex gap-3">
-            <button onClick={onBack} className={btnGhost}>{t('trading.guideBack', lang)}</button>
-            <a href={exchange.docsUrl} target="_blank" rel="noopener noreferrer" className={btnGhost}>{t('trading.docs', lang)}</a>
-            <button onClick={() => setStep('credentials')} className={btnPrimary}>{t('trading.guideContinue', lang)}</button>
-          </div>
-        </div>
-      )}
-
-      {step === 'credentials' && (
-        <div className="border border-border rounded p-6 space-y-4">
-          <h2 className="font-mono text-xl text-accent-green">&gt; {t('trading.stepCredentials', lang)}</h2>
-          <p className="text-sm text-muted font-mono">{t('trading.credentialsHelp', lang)}</p>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted font-mono block mb-1">{t('trading.apiKey', lang)}</label>
-              <input type="text" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className={inputCls} autoComplete="off" />
-            </div>
-            <div>
-              <label className="text-xs text-muted font-mono block mb-1">{t('trading.apiSecret', lang)}</label>
-              <input type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} className={inputCls} autoComplete="off" />
-            </div>
-            {exchange.needsPassphrase && (
-              <div>
-                <label className="text-xs text-muted font-mono block mb-1">{t('trading.passphrase', lang)}</label>
-                <input type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} className={inputCls} autoComplete="off" />
-              </div>
-            )}
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => setStep('guide')} className={btnGhost}>{t('common.backToHome', lang)}</button>
-            <button onClick={() => setStep('mode')} className={btnPrimary} disabled={apiKey.length < 8 || apiSecret.length < 8}>
-              {t('trading.guideContinue', lang)}
-            </button>
-          </div>
-        </div>
-      )}
 
       {step === 'mode' && (
         <div className="border border-border rounded p-6 space-y-3">
@@ -154,7 +143,7 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack }:
             </button>
           ))}
           <div className="flex gap-3">
-            <button onClick={() => setStep('credentials')} className={btnGhost}>{t('common.backToHome', lang)}</button>
+            <button onClick={onBack} className={btnGhost}>{t('trading.guideBack', lang)}</button>
             <button onClick={() => setStep('profile')} className={btnPrimary}>{t('trading.guideContinue', lang)}</button>
           </div>
         </div>
@@ -234,10 +223,53 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack }:
             <input type="checkbox" checked={legalAccepted} onChange={(e) => setLegalAccepted(e.target.checked)} className="mt-0.5 accent-green-400" />
             <span className="text-xs text-terminal-text font-mono">{t('trading.legalAccept', lang)}</span>
           </label>
-          {error && <p className="text-xs text-accent-red font-mono">{error.startsWith('trading.') || error.startsWith('auth.') ? t(error, lang) : error}</p>}
           <div className="flex gap-3">
             <button onClick={() => setStep('brake')} className={btnGhost}>{t('common.backToHome', lang)}</button>
-            <button onClick={handleConnect} disabled={!legalAccepted || submitting} className={btnPrimary}>
+            <button onClick={() => setStep('credentials')} className={btnPrimary} disabled={!legalAccepted}>
+              {t('trading.guideContinue', lang)}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 'credentials' && (
+        <div className="border border-border rounded p-6 space-y-4">
+          <h2 className="font-mono text-xl text-accent-green">&gt; {t('trading.stepCredentials', lang)}</h2>
+          {/* 1. Escape hatches first: create account / generate API key (no dead ends) */}
+          {twoButtonsBlock}
+          {/* 2. Security reminder (the former guide step, now inline) */}
+          <div className="border border-border rounded p-4 space-y-2">
+            <p className="text-xs text-muted font-mono">{t('trading.guideIntro', lang)}</p>
+            <ul className="space-y-1.5 text-xs text-terminal-text font-mono">
+              <li className="flex gap-2"><span className="text-accent-green">&gt;</span> {t('trading.guideTradingOnly', lang)}</li>
+              <li className="flex gap-2"><span className="text-accent-red">&gt;</span> {t('trading.guideNoWithdraw', lang)}</li>
+              <li className="flex gap-2"><span className="text-accent-green">&gt;</span> {t('trading.guideIpWhitelist', lang)}</li>
+              {exchange.needsPassphrase && <li className="flex gap-2"><span className="text-accent-green">&gt;</span> {t('trading.guidePassphrase', lang)}</li>}
+              <li className="flex gap-2"><span className="text-accent-green">&gt;</span> {t('trading.guideNeverShare', lang)}</li>
+            </ul>
+          </div>
+          {/* 3. Then the form */}
+          <p className="text-sm text-muted font-mono">{t('trading.credentialsHelp', lang)}</p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-muted font-mono block mb-1">{t('trading.apiKey', lang)}</label>
+              <input type="text" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className={inputCls} autoComplete="off" />
+            </div>
+            <div>
+              <label className="text-xs text-muted font-mono block mb-1">{t('trading.apiSecret', lang)}</label>
+              <input type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} className={inputCls} autoComplete="off" />
+            </div>
+            {exchange.needsPassphrase && (
+              <div>
+                <label className="text-xs text-muted font-mono block mb-1">{t('trading.passphrase', lang)}</label>
+                <input type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} className={inputCls} autoComplete="off" />
+              </div>
+            )}
+          </div>
+          {error && <p className="text-xs text-accent-red font-mono">{error.startsWith('trading.') || error.startsWith('auth.') ? t(error, lang) : error}</p>}
+          <div className="flex gap-3">
+            <button onClick={() => setStep('legal')} className={btnGhost}>{t('common.backToHome', lang)}</button>
+            <button onClick={handleConnect} disabled={apiKey.length < 8 || apiSecret.length < 8 || submitting} className={btnPrimary}>
               {submitting ? t('trading.connecting', lang) : t('trading.connectButton', lang)}
             </button>
           </div>

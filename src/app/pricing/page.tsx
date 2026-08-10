@@ -2,12 +2,23 @@
 
 import { getLang, t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 export default function PricingPage() {
   const lang = getLang();
   const [loading, setLoading] = useState<string | null>(null);
+  const [commissionRate, setCommissionRate] = useState<number>(0.25);
+
+  useEffect(() => {
+    // Commission is configurable (env/app_settings) — read the real value.
+    fetch('/api/trading/config')
+      .then((r) => r.json())
+      .then((cfg) => {
+        if (typeof cfg?.commissionRate === 'number') setCommissionRate(cfg.commissionRate);
+      })
+      .catch(() => {});
+  }, []);
 
   const getFeatures = (path: string): string[] => {
     const val = t(path, lang);
@@ -118,6 +129,11 @@ export default function PricingPage() {
         <p className="text-xs text-terminal-text font-mono mb-4">
           {t('trading.dashboard.executionSoon', lang)}
         </p>
+        <div className="border border-accent-green rounded p-4 mb-4">
+          <p className="text-sm text-foreground font-mono mb-1">
+            {t('trading.commissionPricing', lang).replace('{rate}', String(Math.round(commissionRate * 100)))}
+          </p>
+        </div>
         <Link
           href="/trading"
           className="inline-block border border-accent-green text-accent-green px-4 py-2 rounded text-sm font-mono hover:bg-accent-green hover:text-black transition-colors"
