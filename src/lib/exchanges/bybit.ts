@@ -1,6 +1,14 @@
 // Bybit adapter. Auth: hex HMAC-SHA256 over "ts + apiKey + recvWindow + query".
 // Docs: https://bybit-exchange.github.io/docs/v5/authentication
 import { hmacHex, httpGet } from './signing';
+import {
+  bybitBalanceUsdt,
+  bybitCancelOrder,
+  bybitClosedFills,
+  bybitOrderStatus,
+  bybitPlaceProtectedEntry,
+  bybitTickerPrice,
+} from './bybit-orders';
 import type { ExchangeAdapter } from './types';
 
 const bybit: ExchangeAdapter = {
@@ -32,6 +40,12 @@ const bybit: ExchangeAdapter = {
       return { ok: false, error: `Network error: ${e instanceof Error ? e.message : 'unknown'}` };
     }
   },
+  getTickerPrice: (symbol, opts) => bybitTickerPrice(symbol, opts),
+  getBalanceUsdt: (apiKey, apiSecret, _passphrase, opts) => bybitBalanceUsdt(apiKey, apiSecret, opts),
+  placeProtectedEntry: (params, apiKey, apiSecret, opts) => bybitPlaceProtectedEntry(params, apiKey, apiSecret, opts),
+  getOrderStatus: (orderId, symbol, apiKey, apiSecret, opts) => bybitOrderStatus(orderId, symbol, apiKey, apiSecret, opts),
+  cancelOrder: (orderId, symbol, apiKey, apiSecret, opts) => bybitCancelOrder(orderId, symbol, apiKey, apiSecret, opts),
+  getClosedFills: (symbol, sinceMs, apiKey, apiSecret, opts) => bybitClosedFills(symbol, sinceMs, apiKey, apiSecret, opts),
 };
 
 export default bybit;

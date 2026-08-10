@@ -1,6 +1,14 @@
 // Binance adapter. Auth: HMAC-SHA256 signature over the query string.
 // Docs: https://developers.binance.com/docs/binance-spot-api-docs/rest-api
 import { hmacHex, httpGet } from './signing';
+import {
+  binanceBalanceUsdt,
+  binanceCancelOrder,
+  binanceClosedFills,
+  binanceOrderStatus,
+  binancePlaceProtectedEntry,
+  binanceTickerPrice,
+} from './binance-orders';
 import type { ExchangeAdapter } from './types';
 
 const binance: ExchangeAdapter = {
@@ -22,6 +30,12 @@ const binance: ExchangeAdapter = {
       return { ok: false, error: `Network error: ${e instanceof Error ? e.message : 'unknown'}` };
     }
   },
+  getTickerPrice: (symbol, opts) => binanceTickerPrice(symbol, opts),
+  getBalanceUsdt: (apiKey, apiSecret, _passphrase, opts) => binanceBalanceUsdt(apiKey, apiSecret, opts),
+  placeProtectedEntry: (params, apiKey, apiSecret, opts) => binancePlaceProtectedEntry(params, apiKey, apiSecret, opts),
+  getOrderStatus: (orderId, symbol, apiKey, apiSecret, opts) => binanceOrderStatus(orderId, symbol, apiKey, apiSecret, opts),
+  cancelOrder: (orderId, symbol, apiKey, apiSecret, opts) => binanceCancelOrder(orderId, symbol, apiKey, apiSecret, opts),
+  getClosedFills: (symbol, sinceMs, apiKey, apiSecret, opts) => binanceClosedFills(symbol, sinceMs, apiKey, apiSecret, opts),
 };
 
 export default binance;
