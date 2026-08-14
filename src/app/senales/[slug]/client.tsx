@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { getLang, t, isRTL } from '@/lib/i18n';
+import { cleanExplanation } from '@/lib/signalText';
 import TermTooltip from '@/components/TermTooltip';
 import TradingViewChart from '@/components/TradingViewChart';
 import OneClickTrade from '@/components/trading/OneClickTrade';
@@ -22,13 +24,31 @@ export default function SignalDetailClient({ signal }: SignalDetailClientProps) 
   const rtl = isRTL(lang);
   const isBuy = signal.signal_type === 'buy';
   const accentColor = isBuy ? 'text-accent-green' : 'text-accent-red';
-  const explanation = (signal as unknown as Record<string, string>)[`explanation_${lang}`] || signal.explanation_en || '';
+  const explanation = cleanExplanation(
+    (signal as unknown as Record<string, string>)[`explanation_${lang}`] || signal.explanation_en,
+    t('signal.explanationFallback', lang),
+  );
 
-  // TradingView symbol for the chart. VISUALIZATION ONLY: the widget is a
-  // market chart for the user; the NOIRAX analysis itself comes from the
-  // Bybit/OKX APIs (pipeline), never from this widget.
-  const baseCoin = (signal.coin || '').split('/')[0].replace('USDT', '');
-  const tvSymbol = baseCoin ? `BYBIT:${baseCoin}USDT` : 'BYBIT:BTCUSDT';
+  // TradingView symbol for the chart, resolved against live exchange listings
+  // (a coin may be delisted on one exchange but listed on another — e.g. XMR).
+  // VISUALIZATION ONLY: the widget is a market chart for the user; the NOIRAX
+  // analysis itself comes from the Bybit/OKX APIs (pipeline), never from it.
+  const [chartSymbol, setChartSymbol] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/chart-symbol?coin=${encodeURIComponent(signal.coin || '')}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setChartSymbol(data?.symbol || null);
+      })
+      .catch(() => {
+        if (!cancelled) setChartSymbol(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [signal.coin]);
+  const tvSymbol = chartSymbol === undefined ? undefined : chartSymbol;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12" dir={rtl ? 'rtl' : 'ltr'}>
@@ -55,15 +75,20 @@ export default function SignalDetailClient({ signal }: SignalDetailClientProps) 
             </span>
           )}
           {signal.risk_level && (
-            <span className={`text-xs border px-2 py-1 rounded ${riskColors[signal.risk_level]} border-current`}>
-              {t(`premium.${signal.risk_level}`, lang) || signal.risk_level}
-            </span>
+            <TermTooltip
+              term={`${t('premium.riskLevel', lang)}: ${t(`premium.${signal.risk_level}`, lang) || signal.risk_level}`}
+              definition={t(`premium.riskLevel${signal.risk_level === 'low' ? 'Low' : signal.risk_level === 'medium' ? 'Medium' : 'High'}Desc`, lang)}
+            >
+              <span className={`text-xs border px-2 py-1 rounded ${riskColors[signal.risk_level]} border-current`}>
+                {t('premium.riskLevel', lang)}: {t(`premium.${signal.risk_level}`, lang) || signal.risk_level}
+              </span>
+            </TermTooltip>
           )}
         </div>
 
         {/* Price Chart — TradingView widget (visualization only, see component docs) */}
         <div className="mb-1">
-          <TradingViewChart symbol={tvSymbol} locale={lang} />
+          <TradingViewChart symbol={tvSymbol} locale={lang} unavailableNote={t('signal.chartUnavailable', lang)} />
         </div>
         <p className="text-[10px] text-muted font-mono mb-6">
           {t('signal.chartNote', lang)}
@@ -140,7 +165,7 @@ export default function SignalDetailClient({ signal }: SignalDetailClientProps) 
         {/* Explanation */}
         <div className="border border-border rounded p-4 mb-6">
           <p className="text-xs text-muted mb-2 font-mono text-accent-green">&gt; {t('signal.whyThisSignal', lang)}</p>
-          <p className="text-sm text-terminal-text leading-relaxed">{typeof explanation === 'string' ? explanation : ''}</p>
+          <p className="text-sm text-terminal-text leading-relaxed">{explanation}</p>
         </div>
 
         {/* Related Links */}

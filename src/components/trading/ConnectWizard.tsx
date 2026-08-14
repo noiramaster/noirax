@@ -20,7 +20,7 @@ interface ConnectWizardProps {
   config: TradingConfig;
   onConnected: () => void;
   onBack: () => void;
-  /** Affiliate/referral signup URL for the exchange (from affiliate_links), falls back to the official one. */
+  /** Official exchange signup URL. */
   signupUrl?: string;
   /** Paper mode: simulated 10,000 USDT, no exchange, no keys. */
   paperMode?: boolean;
@@ -44,6 +44,7 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
   const [profile, setProfile] = useState<RiskProfile>('moderate');
   const [advancedValues, setAdvancedValues] = useState({ positionPct: 10, dailyLossLimitPct: 5, maxPositions: 5 });
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const [testnet, setTestnet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +84,7 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
         maxPositions: profile === 'advanced' ? advancedValues.maxPositions : undefined,
         legalAccepted,
         legalVersion: LEGAL_VERSION,
+        testnet,
       }),
     });
     const data = await resp.json();
@@ -100,7 +102,7 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
   const btnGhost = 'border border-border text-muted px-4 py-2 rounded text-sm font-mono hover:border-accent-green hover:text-foreground transition-colors cursor-pointer';
 
   // Two clearly differentiated options depending on the user's situation:
-  //  A) new to the exchange -> signup (affiliate link when available)
+  //  A) new to the exchange -> official signup page
   //  B) already has an account -> go straight to the exchange's API-key page
   const signupUrlResolved = signupUrl || exchange.signupUrl;
   const twoButtonsBlock = (
@@ -114,9 +116,6 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
             <a href={signupUrlResolved} target="_blank" rel="noopener noreferrer" className={btnPrimary}>
               {t('trading.createHere', lang)}
             </a>
-            {exchange.hasAffiliate && (
-              <span className="text-[9px] text-muted font-mono border border-border rounded px-1 py-0.5">{t('trading.affiliateLabel', lang)}</span>
-            )}
           </div>
         </div>
         <div className="border border-border rounded p-3 flex flex-col gap-2">
@@ -243,6 +242,14 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
       {!paperMode && step === 'credentials' && (
         <div className="border border-border rounded p-6 space-y-4">
           <h2 className="font-mono text-xl text-accent-green">&gt; {t('trading.stepCredentials', lang)}</h2>
+          {/* Testnet toggle: sandbox environment of the exchange, no real money */}
+          <label className="flex items-start gap-2 cursor-pointer border border-yellow-400/60 rounded p-3">
+            <input type="checkbox" checked={testnet} onChange={(e) => setTestnet(e.target.checked)} className="mt-0.5 accent-yellow-400" />
+            <span className="text-xs text-yellow-400 font-mono">
+              <span className="font-bold">{t('trading.testnetLabel', lang)}</span>
+              <span className="block text-muted mt-0.5">{t('trading.testnetDesc', lang)}</span>
+            </span>
+          </label>
           {/* 1. Escape hatches first: create account / generate API key (no dead ends) */}
           {twoButtonsBlock}
           {/* 2. Security reminder (the former guide step, now inline) */}

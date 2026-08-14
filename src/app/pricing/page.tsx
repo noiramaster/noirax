@@ -116,7 +116,6 @@ export default function PricingPage() {
       </div>
 
       <p className="text-xs text-muted mt-8 font-mono text-center">
-        * {t('legal.affiliateDisclaimer', lang)}<br />
         {t('legal.disclaimer', lang)}
       </p>
 

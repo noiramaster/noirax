@@ -26,6 +26,7 @@ export interface ExchangeConnection {
   legal_accepted_at: string;
   created_at: string;
   updated_at: string;
+  testnet?: boolean;
 }
 
 export interface RiskProfilePreset {

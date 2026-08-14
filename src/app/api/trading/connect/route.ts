@@ -26,6 +26,9 @@ export async function POST(request: NextRequest) {
   const apiKey = String(body.apiKey || '').trim();
   const apiSecret = String(body.apiSecret || '').trim();
   const passphrase = body.passphrase ? String(body.passphrase).trim() : undefined;
+  // Testnet connections run against the exchange's sandbox environment
+  // (Bybit testnet, Binance testnet...). No real money can move.
+  const testnet = body.testnet === true || body.testnet === 'true';
 
   // Paper mode: no exchange, no keys — simulated 10,000 USDT.
   const isPaper = exchange === 'paper';
@@ -100,7 +103,7 @@ export async function POST(request: NextRequest) {
   const adapter = isPaper ? undefined : getAdapter(exchange);
   if (adapter) {
     try {
-      const result = await adapter.testConnection(apiKey, apiSecret, passphrase);
+      const result = await adapter.testConnection(apiKey, apiSecret, passphrase, { testnet });
       if (!result.ok) {
         validationError = result.error || 'Credential validation failed.';
       }
@@ -123,10 +126,11 @@ export async function POST(request: NextRequest) {
       daily_loss_limit_pct: dailyLossLimitPct,
       max_positions: maxPositions,
       status: 'active',
+      testnet,
       last_validation_error: validationError,
       legal_version: LEGAL_VERSION,
     })
-    .select('id,exchange,key_hint,mode,profile,position_pct,daily_loss_limit_pct,max_positions,status,last_validation_error,legal_version,created_at')
+    .select('id,exchange,key_hint,mode,profile,position_pct,daily_loss_limit_pct,max_positions,status,testnet,last_validation_error,legal_version,created_at')
     .single();
 
   if (error || !created) {

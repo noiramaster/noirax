@@ -13,13 +13,14 @@ import type { ExchangeAdapter } from './types';
 
 const bybit: ExchangeAdapter = {
   id: 'bybit',
-  async testConnection(apiKey, apiSecret) {
+  async testConnection(apiKey, apiSecret, _passphrase, opts) {
     try {
+      const base = opts?.testnet ? 'https://api-testnet.bybit.com' : 'https://api.bybit.com';
       const ts = Date.now();
       const recvWindow = '5000';
       const query = 'accountType=UNIFIED';
       const signature = hmacHex(apiSecret, `${ts}${apiKey}${recvWindow}${query}`);
-      const { status, body } = await httpGet(`https://api.bybit.com/v5/account/wallet-balance?${query}`, {
+      const { status, body } = await httpGet(`${base}/v5/account/wallet-balance?${query}`, {
         'X-BAPI-API-KEY': apiKey,
         'X-BAPI-TIMESTAMP': String(ts),
         'X-BAPI-RECV-WINDOW': recvWindow,

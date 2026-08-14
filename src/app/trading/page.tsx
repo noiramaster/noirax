@@ -11,12 +11,6 @@ import { RISK_PROFILES } from '@/lib/trading';
 import type { ExchangeConnection } from '@/lib/trading';
 import type { User } from '@supabase/supabase-js';
 
-interface AffiliateRow {
-  exchange: string;
-  url: string;
-  is_active: boolean;
-}
-
 export default function TradingPage() {
   const lang = getLang();
   const router = useRouter();
@@ -24,7 +18,6 @@ export default function TradingPage() {
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState<TradingConfig | null>(null);
   const [connections, setConnections] = useState<ExchangeConnection[]>([]);
-  const [affiliateLinks, setAffiliateLinks] = useState<Record<string, string>>({});
   const [selectedExchange, setSelectedExchange] = useState<string | null>(null);
   const [paperMode, setPaperMode] = useState(false);
   const [exchangeFilter, setExchangeFilter] = useState('');
@@ -52,10 +45,9 @@ export default function TradingPage() {
       setUser(sessionData.session.user);
       const token = sessionData.session.access_token;
 
-      const [cfgResp, connResp, affResp] = await Promise.all([
+      const [cfgResp, connResp] = await Promise.all([
         fetch('/api/trading/config'),
         fetch('/api/trading/connections', { headers: { Authorization: `Bearer ${token}` } }),
-        supabase.from('affiliate_links').select('exchange,url,is_active').eq('is_active', true),
       ]);
       if (cancelled) return;
 
@@ -64,12 +56,6 @@ export default function TradingPage() {
 
       const connData = await connResp.json();
       setConnections(connData.connections || []);
-
-      const aff: Record<string, string> = {};
-      for (const row of (affResp.data || []) as AffiliateRow[]) {
-        aff[row.exchange] = row.url;
-      }
-      setAffiliateLinks(aff);
       setLoading(false);
     })();
     return () => {
@@ -139,12 +125,12 @@ export default function TradingPage() {
   const connectedIds = new Set(connections.filter((c) => c.status !== 'revoked').map((c) => c.exchange));
   const PAPER_EXCHANGE = {
     id: 'paper', name: 'Modo Prueba', signupUrl: '', apiKeyUrl: '', docsUrl: '',
-    hasAffiliate: false, supportsSpot: true, supportsFutures: false, needsPassphrase: false,
+    supportsSpot: true, supportsFutures: false, needsPassphrase: false,
   };
   const exchangeCard = (id: string) => {
     const info = getExchangeInfo(id);
     if (!info) return null;
-    const url = affiliateLinks[id] || info.signupUrl;
+    const url = info.signupUrl;
     const already = connectedIds.has(id);
     return (
       <div key={id} className="border border-border rounded p-4 flex flex-col gap-2">
@@ -158,7 +144,6 @@ export default function TradingPage() {
             <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-muted font-mono underline hover:text-foreground">
               {t('trading.noAccount', lang)} {info.name}? {t('trading.createHere', lang)}
             </a>
-            {info.hasAffiliate && <span className="text-[9px] text-muted font-mono border border-border rounded px-1 py-0.5">{t('trading.affiliateLabel', lang)}</span>}
           </div>
           <div className="flex items-center gap-1.5">
             <a href={info.apiKeyUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-muted font-mono underline hover:text-foreground">
@@ -194,7 +179,7 @@ export default function TradingPage() {
             exchange={paperMode ? PAPER_EXCHANGE : (selectedExchange ? getExchangeInfo(selectedExchange)! : PAPER_EXCHANGE)}
             config={config}
             paperMode={paperMode}
-            signupUrl={selectedExchange ? (affiliateLinks[selectedExchange] || getExchangeInfo(selectedExchange)?.signupUrl) : ''}
+            signupUrl={selectedExchange ? getExchangeInfo(selectedExchange)?.signupUrl : ''}
             onConnected={() => { setSelectedExchange(null); setPaperMode(false); refreshConnections(); }}
             onBack={() => { setSelectedExchange(null); setPaperMode(false); }}
           />
@@ -215,6 +200,11 @@ export default function TradingPage() {
                     {isPaper && (
                       <span className="text-[10px] border border-yellow-400/60 text-yellow-400 px-2 py-0.5 rounded font-mono">
                         {t('trading.paper.badge', lang)}
+                      </span>
+                    )}
+                    {conn.testnet && !isPaper && (
+                      <span className="text-[10px] border border-yellow-400/60 text-yellow-400 px-2 py-0.5 rounded font-mono">
+                        {t('trading.testnetBadge', lang)}
                       </span>
                     )}
                     <span className={`text-[10px] border px-2 py-0.5 rounded font-mono ${conn.status === 'paused' ? 'border-accent-red text-accent-red' : 'border-accent-green text-accent-green'}`}>

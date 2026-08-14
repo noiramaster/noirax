@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/apiAuth';
 import { getServiceSupabase } from '@/lib/supabase';
 
-// Lists the authenticated user's exchange connections (metadata only — the
+// Lists the authenticated user's exchange connections (metadata only â€” the
 // encrypted key material is never selected, and the authenticated role cannot
 // read those columns anyway, see migration 005).
 export async function GET(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const supabase = getServiceSupabase();
   const { data, error } = await supabase
     .from('exchange_connections')
-    .select('id,exchange,key_hint,mode,profile,position_pct,daily_loss_limit_pct,max_positions,status,paused_reason,last_validation_error,legal_version,legal_accepted_at,created_at,updated_at')
+    .select('id,exchange,key_hint,mode,profile,position_pct,daily_loss_limit_pct,max_positions,status,paused_reason,last_validation_error,legal_version,legal_accepted_at,created_at,updated_at,testnet')
     .eq('user_id', user.id)
     .order('created_at', { ascending: true });
 

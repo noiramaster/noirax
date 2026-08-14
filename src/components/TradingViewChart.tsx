@@ -3,11 +3,13 @@
 import { useEffect, useRef } from 'react';
 
 interface TradingViewChartProps {
-  /** TradingView symbol, e.g. "BYBIT:ZECUSDT". */
-  symbol: string;
+  /** TradingView symbol, e.g. "BYBIT:ZECUSDT". Empty/null -> clean "not available" panel. */
+  symbol?: string | null;
   /** Chart interval, TradingView codes: "60" = 1h, "15" = 15m, "D" = daily. */
   interval?: string;
   locale?: string;
+  /** Optional note shown inside the "chart not available" panel. */
+  unavailableNote?: string;
 }
 
 /**
@@ -21,9 +23,11 @@ interface TradingViewChartProps {
  *
  * The widget loads its own iframe from TradingView's CDN at runtime; if the
  * CDN is unreachable the container stays empty and the rest of the page is
- * unaffected.
+ * unaffected. When no valid exchange symbol exists (e.g. a coin delisted
+ * everywhere), a clean panel replaces the widget instead of the raw
+ * TradingView error.
  */
-export default function TradingViewChart({ symbol, interval = '60', locale = 'en' }: TradingViewChartProps) {
+export default function TradingViewChart({ symbol, interval = '60', locale = 'en', unavailableNote }: TradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,5 +67,20 @@ export default function TradingViewChart({ symbol, interval = '60', locale = 'en
     };
   }, [symbol, interval, locale]);
 
-  return <div ref={containerRef} className="w-full h-[400px]" />;
+  if (symbol === null) {
+    return (
+      <div className="w-full h-[420px] md:h-[520px] border border-border rounded flex flex-col items-center justify-center gap-2 text-center px-6">
+        <p className="font-mono text-sm text-muted">
+          {unavailableNote || 'Chart not available for this coin.'}
+        </p>
+      </div>
+    );
+  }
+
+  if (symbol === undefined) {
+    // Resolution in progress — keep the slot sized so the layout does not jump.
+    return <div className="w-full h-[420px] md:h-[520px] border border-border rounded" />;
+  }
+
+  return <div ref={containerRef} className="w-full h-[420px] md:h-[520px]" />;
 }

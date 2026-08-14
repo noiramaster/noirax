@@ -30,7 +30,7 @@ export interface ProtectedEntryParams {
 
 export interface ExchangeAdapter {
   id: string;
-  testConnection(apiKey: string, apiSecret: string, passphrase?: string): Promise<TestResult>;
+  testConnection(apiKey: string, apiSecret: string, passphrase?: string, opts?: ConnectionOpts): Promise<TestResult>;
   // --- Order execution (optional: only exchanges with a real implementation
   //     can execute; the engine skips the rest with a logged event) ---
   getTickerPrice?(symbol: string, opts?: ConnectionOpts): Promise<{ price: number }>;
@@ -62,7 +62,6 @@ export interface ExchangeInfo {
   /** Direct URL to the exchange's API-key management page (verified working). */
   apiKeyUrl: string;
   docsUrl: string;
-  hasAffiliate: boolean; // shows the "affiliate link" disclosure label (UE/CNMC)
   supportsSpot: boolean;
   supportsFutures: boolean;
   needsPassphrase: boolean;

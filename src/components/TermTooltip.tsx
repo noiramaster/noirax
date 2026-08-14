@@ -16,6 +16,10 @@ export default function TermTooltip({ term, definition, children }: TermTooltipP
       className="relative inline-block cursor-help border-b border-dotted border-muted"
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}
+      onClick={(e) => {
+        e.stopPropagation();
+        setShow((s) => !s);
+      }}
     >
       {children}
       {show && (

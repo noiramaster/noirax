@@ -23,8 +23,6 @@ export default function LegalPage() {
               ni como entidad de inversión regulada por la CNMV. */}
         </div>
 
-        <p>{t('legal.affiliateDisclaimer', lang)}</p>
-
         {/* Arabic-specific warning */}
         {lang === 'ar' && (
           <div className="border border-accent-magenta rounded p-4 font-mono text-xs text-accent-magenta">

@@ -2,8 +2,10 @@
 
 import type { Signal } from '@/lib/types';
 import { getLang, t } from '@/lib/i18n';
+import { cleanExplanation } from '@/lib/signalText';
 import Link from 'next/link';
 import OneClickTrade from '@/components/trading/OneClickTrade';
+import TermTooltip from '@/components/TermTooltip';
 
 interface SignalCardProps {
   signal: Signal;
@@ -26,7 +28,10 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
   const lang = getLang();
   const isBuy = signal.signal_type === 'buy';
   const accentColor = isBuy ? 'text-accent-green' : 'text-accent-red';
-  const explanation = signal[`explanation_${lang}` as keyof Signal] || signal.explanation_en || '';
+  const explanation = cleanExplanation(
+    signal[`explanation_${lang}` as keyof Signal] || signal.explanation_en,
+    t('signal.explanationFallback', lang),
+  );
   const slug = signal.slug || '';
 
   return (
@@ -62,9 +67,11 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
           </span>
         )}
         {signal.risk_level && (
-          <span className={`text-xs border px-1.5 py-0.5 rounded ${riskColors[signal.risk_level] || ''}`}>
-            {t(`premium.${signal.risk_level}`, lang) || riskLabels[signal.risk_level]}
-          </span>
+          <TermTooltip term={`${t('premium.riskLevel', lang)}: ${t(`premium.${signal.risk_level}`, lang) || riskLabels[signal.risk_level]}`} definition={t(`premium.riskLevel${signal.risk_level === 'low' ? 'Low' : signal.risk_level === 'medium' ? 'Medium' : 'High'}Desc`, lang)}>
+            <span className={`text-xs border px-1.5 py-0.5 rounded ${riskColors[signal.risk_level] || ''}`}>
+              {t('premium.riskLevel', lang)}: {t(`premium.${signal.risk_level}`, lang) || riskLabels[signal.risk_level]}
+            </span>
+          </TermTooltip>
         )}
       </div>
 
@@ -109,7 +116,7 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
         </div>
       )}
 
-      <div className="text-terminal-text text-xs mt-1">{typeof explanation === 'string' ? explanation : ''}</div>
+      <div className="text-terminal-text text-xs mt-1">{explanation}</div>
       <div className="text-muted text-xs mt-1 flex gap-3 items-center">
         <span>{signal.timeframe}</span>
         <span>{new Date(signal.created_at).toLocaleString()}</span>

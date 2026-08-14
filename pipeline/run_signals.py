@@ -6,6 +6,7 @@ Technical + Fundamental analysis, single Gemini call per run,
 """
 
 import os
+import re
 import sys
 import json
 import time
@@ -73,6 +74,17 @@ ATR_TP2_OPTIMIZED = float(os.environ.get("TECH_ATR_TP2_OPTIMIZED", "1.0"))
 ATR_TP3_OPTIMIZED = float(os.environ.get("TECH_ATR_TP3_OPTIMIZED", "1.0"))
 
 SUPPORTED_LANGS = ["en", "es", "pt", "fr", "de", "it", "ar"]
+
+# Minimum length and forbidden patterns for explanations so test/debug/placeholder
+# text (e.g. "e2e", "simulation signal") can never reach the public site.
+EXPLANATION_MIN_CHARS = 20
+_TEST_TEXT_PATTERNS = re.compile(
+    r"\b(e2e|test(ing|er)?|dummy|debug|placeholder|lorem ipsum|sample|simulation signal|señal de simulación|foo|bar)\b",
+    re.IGNORECASE,
+)
+
+# Coin names that reach the DB must look like real market symbols (BASE/USDT).
+_VALID_COIN_PATTERN = re.compile(r"^[A-Za-z0-9]{1,15}/USDT$")
 
 # Valid Bybit spot symbols cache (populated on first use)
 _VALID_BYBIT_SYMBOLS: Optional[set] = None
@@ -638,6 +650,17 @@ Return ONLY valid JSON, no markdown."""
             else:
                 return None
     return None
+
+
+def sanitize_explanations(explanations: dict, fallback: dict) -> dict:
+    """Replace test/placeholder/short explanations with the template fallback."""
+    clean = {}
+    for lang in SUPPORTED_LANGS:
+        value = str(explanations.get(lang, "") or "").strip()
+        if len(value) < EXPLANATION_MIN_CHARS or _TEST_TEXT_PATTERNS.search(value):
+            value = str(fallback.get(lang, "") or "").strip()
+        clean[lang] = value
+    return clean
 
 
 def generate_fallback_explanations(coin: str, analysis: dict, fund_result: dict) -> dict:
@@ -1435,9 +1458,17 @@ def main():
         slug = create_slug(coin, analysis["signal_type"], timestamp, item.get("duration_type", "swing"))
 
         if ai_explanations and coin in ai_explanations:
-            explanations = ai_explanations[coin]
+            explanations = sanitize_explanations(
+                ai_explanations[coin],
+                generate_fallback_explanations(coin, analysis, fund_result),
+            )
         else:
             explanations = generate_fallback_explanations(coin, analysis, fund_result)
+
+        # Skip signals whose coin is not a real BASE/USDT symbol (Gemini/template garbage).
+        if not _VALID_COIN_PATTERN.match(coin):
+            logger.warning(f"Skipping {coin}: invalid coin symbol")
+            continue
 
         # Dual TP/SL: free gets conservative, premium gets optimized
         if tier == "free":

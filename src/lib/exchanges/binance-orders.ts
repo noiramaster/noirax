@@ -12,6 +12,40 @@ function signQuery(secret: string, query: string): string {
   return hmacHex(secret, query);
 }
 
+// --- Symbol filters (PRICE_FILTER tickSize / LOT_SIZE stepSize) ---
+// Binance rejects orders whose price/quantity has more precision than the
+// symbol's filter allows ("Filter failure: PRICE_FILTER"). Every price and
+// quantity must be rounded to the exchange's tick/step before signing.
+interface SymbolFilters {
+  tickSize: number;
+  stepSize: number;
+}
+const filtersCache = new Map<string, { fetchedAt: number; filters: SymbolFilters }>();
+const FILTER_CACHE_TTL_MS = 30 * 60 * 1000;
+
+function roundToStep(value: number, step: number): number {
+  if (!(step > 0)) return value;
+  const decimals = Math.max(0, Math.ceil(-Math.log10(step) - 1e-9));
+  return Number((Math.round(value / step) * step).toFixed(decimals));
+}
+
+async function getSymbolFilters(symbol: string, opts?: ConnectionOpts): Promise<SymbolFilters> {
+  const cached = filtersCache.get(symbol);
+  if (cached && Date.now() - cached.fetchedAt < FILTER_CACHE_TTL_MS) return cached.filters;
+  const { status, body } = await httpGet(`${base(opts)}/api/v3/exchangeInfo?symbol=${symbol}`, {});
+  if (status !== 200) throw new Error(`Binance exchangeInfo HTTP ${status}`);
+  const data = JSON.parse(body);
+  const sym = data?.symbols?.[0];
+  const priceFilter = (sym?.filters || []).find((f: { filterType: string }) => f.filterType === 'PRICE_FILTER');
+  const lotFilter = (sym?.filters || []).find((f: { filterType: string }) => f.filterType === 'LOT_SIZE');
+  const filters = {
+    tickSize: parseFloat(priceFilter?.tickSize ?? '1'),
+    stepSize: parseFloat(lotFilter?.stepSize ?? '1e-8'),
+  };
+  filtersCache.set(symbol, { fetchedAt: Date.now(), filters });
+  return filters;
+}
+
 export async function binanceTickerPrice(symbol: string, opts?: ConnectionOpts): Promise<{ price: number }> {
   const { status, body } = await httpGet(`${base(opts)}/api/v3/ticker/price?symbol=${symbol}`, {});
   if (status !== 200) throw new Error(`Binance ticker HTTP ${status}`);
@@ -42,16 +76,26 @@ export async function binancePlaceProtectedEntry(
   const s = base(opts);
   const protectedOrderIds: string[] = [];
   try {
+    // Round every price/quantity to the symbol's filters (PRICE_FILTER/LOT_SIZE)
+    // or Binance rejects the order ("Filter failure: PRICE_FILTER").
+    const filters = await getSymbolFilters(params.symbol, opts);
+    const entryPrice = roundToStep(params.entryPrice, filters.tickSize);
+    const slPrice = roundToStep(params.slPrice, filters.tickSize);
+    const tpPrices = params.tpPrices.map((tp) => roundToStep(tp, filters.tickSize));
+    const quantity = roundToStep(params.quantity, filters.stepSize);
+    if (!(quantity > 0)) return { ok: false, error: `quantity below LOT_SIZE step (${filters.stepSize})` };
+
     // 1. OCO protection (SL stop-limit + TP1 limit) for the opposite side.
-    const slStopLimit = params.side === 'buy'
-      ? params.slPrice * 1.002   // stop-limit slightly above the stop (slippage room)
-      : params.slPrice * 0.998;
+    const slStopLimit = roundToStep(
+      params.side === 'buy' ? slPrice * 1.002 : slPrice * 0.998,
+      filters.tickSize,
+    );
     const ocoParams = new URLSearchParams({
       symbol: params.symbol,
       side: opposite(params.side),
-      quantity: String(params.quantity),
-      price: String(params.tpPrices[0]),
-      stopPrice: String(params.slPrice),
+      quantity: String(quantity),
+      price: String(tpPrices[0]),
+      stopPrice: String(slPrice),
       stopLimitPrice: slStopLimit.toFixed(8),
       stopLimitTimeInForce: 'GTC',
       timestamp: String(Date.now()),
@@ -69,13 +113,13 @@ export async function binancePlaceProtectedEntry(
     protectedOrderIds.push(oco.orderListId ? `oco:${oco.orderListId}` : (oco.orderReports?.[0]?.orderId ?? 'oco'));
 
     // 2. Extra TP legs as plain limits (they only fill if the price moves in our favor).
-    for (const tp of params.tpPrices.slice(1)) {
+    for (const tp of tpPrices.slice(1)) {
       const q = new URLSearchParams({
         symbol: params.symbol,
         side: opposite(params.side),
         type: 'LIMIT',
         timeInForce: 'GTC',
-        quantity: String(params.quantity),
+        quantity: String(quantity),
         price: tp.toFixed(8),
         timestamp: String(Date.now()),
       }).toString();
@@ -93,8 +137,8 @@ export async function binancePlaceProtectedEntry(
       side: params.side === 'buy' ? 'BUY' : 'SELL',
       type: 'LIMIT',
       timeInForce: 'GTC',
-      quantity: String(params.quantity),
-      price: params.entryPrice.toFixed(8),
+      quantity: String(quantity),
+      price: entryPrice.toFixed(8),
       timestamp: String(Date.now()),
     }).toString();
     const er = await httpPost(`${s}/api/v3/order?${eq}&signature=${signQuery(apiSecret, eq)}`, authHeaders(apiKey), '');

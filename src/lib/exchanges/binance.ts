@@ -13,12 +13,13 @@ import type { ExchangeAdapter } from './types';
 
 const binance: ExchangeAdapter = {
   id: 'binance',
-  async testConnection(apiKey, apiSecret) {
+  async testConnection(apiKey, apiSecret, _passphrase, opts) {
     try {
+      const base = opts?.testnet ? 'https://testnet.binance.vision' : 'https://api.binance.com';
       const ts = Date.now();
       const query = `timestamp=${ts}`;
       const signature = hmacHex(apiSecret, query);
-      const { status } = await httpGet(`https://api.binance.com/api/v3/account?${query}&signature=${signature}`, {
+      const { status } = await httpGet(`${base}/api/v3/account?${query}&signature=${signature}`, {
         'X-MBX-APIKEY': apiKey,
       });
       if (status === 200) return { ok: true };
