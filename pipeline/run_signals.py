@@ -43,7 +43,7 @@ DEFAULT_TIMEFRAME = "1h"
 GEMINI_MODEL = "models/gemini-2.5-flash-lite"
 
 # Signal quality gates (Mejoras 4-7; env-configurable, sensible defaults)
-MIN_CONFIDENCE = int(os.environ.get("TECH_MIN_CONFIDENCE", "40"))
+MIN_CONFIDENCE = int(os.environ.get("TECH_MIN_CONFIDENCE", "25"))
 MARKET_REGIME_DOWN_PCT = abs(float(os.environ.get("TECH_REGIME_DOWN_PCT", "2.0")))
 MARKET_REGIME_UP_PCT = abs(float(os.environ.get("TECH_REGIME_UP_PCT", "2.0")))
 SIGNALS_MAX_AGE_DAYS = int(os.environ.get("SIGNALS_MAX_AGE_DAYS", "7"))
