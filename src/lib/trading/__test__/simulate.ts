@@ -102,7 +102,10 @@ async function insertConnection(userId: string, mode: 'auto' | 'confirm') {
 }
 
 async function cleanup() {
-  for (const id of created) await supabase.from('exchange_connections').delete().eq('id', id);
+  for (const id of created) {
+    await supabase.from('exchange_connections').delete().eq('id', id);
+    await supabase.from('paper_orders').delete().eq('connection_id', id);
+  }
   for (const id of createdSignals) await supabase.from('signals').delete().eq('id', id);
   for (const uid of createdUsers) {
     await supabase.from('auto_trades').delete().eq('user_id', uid);

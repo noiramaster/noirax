@@ -3,6 +3,7 @@
 import { getLang, t, isRTL } from '@/lib/i18n';
 import TermTooltip from '@/components/TermTooltip';
 import TradingViewChart from '@/components/TradingViewChart';
+import OneClickTrade from '@/components/trading/OneClickTrade';
 import Link from 'next/link';
 import type { Signal } from '@/lib/types';
 
@@ -21,7 +22,7 @@ export default function SignalDetailClient({ signal }: SignalDetailClientProps) 
   const rtl = isRTL(lang);
   const isBuy = signal.signal_type === 'buy';
   const accentColor = isBuy ? 'text-accent-green' : 'text-accent-red';
-  const explanation = (signal as any)[`explanation_${lang}`] || signal.explanation_en || '';
+  const explanation = (signal as unknown as Record<string, string>)[`explanation_${lang}`] || signal.explanation_en || '';
 
   // TradingView symbol for the chart. VISUALIZATION ONLY: the widget is a
   // market chart for the user; the NOIRAX analysis itself comes from the
@@ -143,7 +144,8 @@ export default function SignalDetailClient({ signal }: SignalDetailClientProps) 
         </div>
 
         {/* Related Links */}
-        <div className="flex flex-wrap gap-3 text-xs font-mono">
+        <div className="flex flex-wrap gap-3 text-xs font-mono items-center">
+          {signal.signal_type === 'buy' && <OneClickTrade signal={signal} />}
           <Link href={`/track-record?coin=${encodeURIComponent(signal.coin)}`} className="text-muted hover:text-foreground transition-colors border border-border px-3 py-1.5 rounded">
             {t('signal.viewOnTrackRecord', lang)}
           </Link>

@@ -43,6 +43,7 @@ interface TradesData {
   open: TradeLike[];
   closed: TradeLike[];
   stats: Stats;
+  paper?: { active: boolean; balance?: number; trialDays?: number; daysActive?: number; cumulativePnl?: number };
 }
 
 export default function TradesPanel() {
@@ -65,6 +66,7 @@ export default function TradesPanel() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data fetch with session token
     load();
   }, [load]);
 
@@ -108,7 +110,7 @@ export default function TradesPanel() {
   const pnlColor = (n: number | null | undefined) => (n === null || n === undefined ? 'text-muted' : n >= 0 ? 'text-accent-green' : 'text-accent-red');
   const barWidth = (v: number) => `${Math.max(4, Math.min(100, (Math.abs(v) / maxBucketPnl) * 100))}%`;
 
-  const comparisonRows = (buckets: Record<string, { wins: number; losses: number; pnl: number }>, nameKey: string) => {
+  const comparisonRows = (buckets: Record<string, { wins: number; losses: number; pnl: number }>) => {
     const entries = Object.entries(buckets);
     if (entries.length === 0) return <p className="text-[11px] text-muted font-mono">{t('trading.dashboard.noHistory', lang)}</p>;
     return (
@@ -129,6 +131,36 @@ export default function TradesPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Paper mode banner + trial summary */}
+      {data.paper?.active && (
+        <div className="border border-yellow-400/60 rounded p-4 space-y-2">
+          <p className="text-xs font-mono text-yellow-400">⚠ {t('trading.paper.badge', lang)}</p>
+          <p className="text-xs text-terminal-text font-mono">{t('trading.paper.balance', lang)}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono">
+            <div className="border border-border rounded p-2">
+              <p className="text-muted">{t('trading.paper.trialResult', lang)}</p>
+              <p className={data.stats.netPnl >= 0 ? 'text-accent-green' : 'text-accent-red'}>{fmtMoney(data.stats.netPnl)}</p>
+            </div>
+            <div className="border border-border rounded p-2">
+              <p className="text-muted">{t('trading.dashboard.winRateLabel', lang)}</p>
+              <p className="text-foreground">{data.stats.winRate}%</p>
+            </div>
+            <div className="border border-border rounded p-2">
+              <p className="text-muted">{t('trading.paper.tradesCount', lang)}</p>
+              <p className="text-foreground">{data.stats.total}</p>
+            </div>
+            <div className="border border-border rounded p-2">
+              <p className="text-muted">{t('trading.paper.simBalance', lang)}</p>
+              <p className="text-foreground">{fmtMoney(10000 + (data.paper.cumulativePnl ?? 0))}</p>
+            </div>
+          </div>
+          {(data.paper.daysActive ?? 0) >= (data.paper.trialDays ?? 7) && (
+            <p className="text-[11px] font-mono text-yellow-400">{t('trading.paper.trialEnded', lang)}</p>
+          )}
+          <p className="text-[10px] text-muted font-mono">{t('trading.paper.disclaimer', lang)}</p>
+        </div>
+      )}
+
       {/* Engine status */}
       <p className="text-xs text-accent-green font-mono border border-accent-green rounded p-3">
         &gt; {t('trading.dashboard.engineActive', lang)}
@@ -143,6 +175,7 @@ export default function TradesPanel() {
           <div className="space-y-2">
             {data.pending.map((p) => {
               const expiresAt = p.approval_expires_at ? new Date(p.approval_expires_at).getTime() : 0;
+              // eslint-disable-next-line react-hooks/purity -- countdown display, intentionally re-computed on render
               const mins = Math.max(0, Math.round((expiresAt - Date.now()) / 60000));
               return (
                 <div key={p.id} className="border border-border rounded p-3 flex flex-wrap items-center gap-3">
@@ -292,15 +325,15 @@ export default function TradesPanel() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="border border-border rounded p-3">
             <p className="text-xs text-muted font-mono mb-2">{t('trading.dashboard.byCoinTitle', lang)}</p>
-            {comparisonRows(data.stats.byCoin, '')}
+            {comparisonRows(data.stats.byCoin)}
           </div>
           <div className="border border-border rounded p-3">
             <p className="text-xs text-muted font-mono mb-2">{t('trading.dashboard.byProfileTitle', lang)}</p>
-            {comparisonRows(data.stats.byProfile, '')}
+            {comparisonRows(data.stats.byProfile)}
           </div>
           <div className="border border-border rounded p-3">
             <p className="text-xs text-muted font-mono mb-2">{t('trading.dashboard.byModeTitle', lang)}</p>
-            {comparisonRows(data.stats.byMode, '')}
+            {comparisonRows(data.stats.byMode)}
           </div>
         </div>
       </div>

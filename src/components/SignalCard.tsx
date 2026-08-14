@@ -3,6 +3,7 @@
 import type { Signal } from '@/lib/types';
 import { getLang, t } from '@/lib/i18n';
 import Link from 'next/link';
+import OneClickTrade from '@/components/trading/OneClickTrade';
 
 interface SignalCardProps {
   signal: Signal;
@@ -109,7 +110,7 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
       )}
 
       <div className="text-terminal-text text-xs mt-1">{typeof explanation === 'string' ? explanation : ''}</div>
-      <div className="text-muted text-xs mt-1 flex gap-3">
+      <div className="text-muted text-xs mt-1 flex gap-3 items-center">
         <span>{signal.timeframe}</span>
         <span>{new Date(signal.created_at).toLocaleString()}</span>
         {slug && (
@@ -120,6 +121,7 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
         <Link href={`/track-record?coin=${encodeURIComponent(signal.coin)}`} className="text-muted hover:text-foreground">
           {t('signal.viewOnTrackRecord', lang)}
         </Link>
+        {!isPremium && signal.signal_type === 'buy' && <OneClickTrade signal={signal} />}
       </div>
     </div>
   );

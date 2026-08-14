@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/apiAuth';
 import { getServiceSupabase } from '@/lib/supabase';
+import { fetchMarketPrice } from '@/lib/trading/prices';
 
 // User's trades for the dashboard: pending confirmations, open trades (with
 // unrealized PnL), closed history, and simple stats/charts data.
@@ -15,17 +16,16 @@ export async function GET(request: NextRequest) {
     supabase.from('auto_trades').select('*').eq('user_id', user.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(20),
     supabase.from('auto_trades').select('*').eq('user_id', user.id).eq('status', 'open').order('created_at', { ascending: false }),
     supabase.from('auto_trades').select('*').eq('user_id', user.id).eq('status', 'closed').order('closed_at', { ascending: false }).limit(200),
-    supabase.from('exchange_connections').select('id,exchange,status,key_hint,mode,profile').eq('user_id', user.id),
+    supabase.from('exchange_connections').select('id,exchange,status,key_hint,mode,profile,created_at').eq('user_id', user.id),
   ]);
+  const paperConn = (connections.data || []).find((c) => c.exchange === 'paper' && c.status === 'active');
 
-  // Current prices for open trades (unrealized PnL).
+  // Current prices for open trades (unrealized PnL) — resilient multi-source.
   const openWithPnl = [];
   for (const t of open.data || []) {
     let current = null;
     try {
-      const resp = await fetch(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${encodeURIComponent(t.symbol)}`, { signal: AbortSignal.timeout(8000) });
-      const d = await resp.json();
-      current = parseFloat(d?.result?.list?.[0]?.lastPrice ?? '0');
+      current = await fetchMarketPrice(t.symbol);
     } catch {
       current = null;
     }
@@ -80,6 +80,15 @@ export async function GET(request: NextRequest) {
     open: openWithPnl,
     closed: closedRows.slice(0, 50),
     connections: connections.data || [],
+    paper: paperConn
+      ? {
+          active: true,
+          balance: 10000,
+          trialDays: 7,
+          daysActive: Math.floor((Date.now() - new Date(paperConn.created_at).getTime()) / 86_400_000),
+          cumulativePnl: Math.round(closedRows.reduce((a, t) => a + Number(t.pnl_net ?? 0), 0) * 100) / 100,
+        }
+      : { active: false },
     stats: {
       total: closedRows.length,
       wins,

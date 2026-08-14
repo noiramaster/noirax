@@ -6,13 +6,15 @@
 //  - confirm mode: creates a pending trade the user approves within N minutes
 //  - reconciles open trades (fills -> close, pnl, commission)
 // Every failure is logged to trading_events and alerts the operator; nothing
-// fails silently.
+// fails silently. Paper-mode connections (exchange='paper') run on the simulated
+// exchange with a fictitious 10,000 USDT balance.
 
 import { getServiceSupabase } from '@/lib/supabase';
 import { buildAdapterForConnection } from './connection';
 import { buildTradePlan } from './sizing';
 import { alertOperator, logEvent } from './events';
 import { paperExchange } from './paper';
+import { fetchMarketPrice } from './prices';
 import type { ConnectionOpts, ExchangeAdapter } from '@/lib/exchanges/types';
 
 interface EngineConfig {
@@ -24,7 +26,7 @@ interface EngineConfig {
   safety: { enabled: boolean; maxPct: number; tradeCount: number; days: number };
 }
 
-async function loadConfig(): Promise<EngineConfig> {
+export async function loadConfig(): Promise<EngineConfig> {
   const supabase = getServiceSupabase();
   const settings: Record<string, string> = {};
   try {
@@ -65,14 +67,19 @@ export interface EngineReport {
   closed: number;
 }
 
-async function getAdapterForConnection(
-  conn: { exchange: string; api_key_enc: string; api_secret_enc: string; testnet?: boolean },
+export async function getAdapterForConnection(
+  conn: { id?: string; exchange: string; api_key_enc: string; api_secret_enc: string; testnet?: boolean },
   cfg: EngineConfig
 ): Promise<{ adapter: ExchangeAdapter; apiKey: string; apiSecret: string; opts: ConnectionOpts }> {
-  if (cfg.simulate) {
-    return { adapter: paperExchange, apiKey: 'paper', apiSecret: 'paper', opts: {} };
+  // Per-user paper trading: no keys, no exchange, simulated balance.
+  if (conn.exchange === 'paper') {
+    return { adapter: paperExchange, apiKey: 'paper', apiSecret: 'paper', opts: { connectionId: conn.id } };
   }
-  return buildAdapterForConnection(conn);
+  if (cfg.simulate) {
+    return { adapter: paperExchange, apiKey: 'paper', apiSecret: 'paper', opts: { connectionId: conn.id } };
+  }
+  const built = await buildAdapterForConnection(conn);
+  return { ...built, opts: { ...built.opts, connectionId: conn.id } };
 }
 
 export async function runEngine(): Promise<EngineReport> {
@@ -116,6 +123,158 @@ export async function runEngine(): Promise<EngineReport> {
   return report;
 }
 
+export interface CapCheck {
+  ok: boolean;
+  reason?: string;
+  todayLoss: number;
+  capital: number;
+}
+
+// Shared guard used by BOTH the scheduled engine and the one-click button:
+// daily-loss brake + balance fetch + max-open-trades cap. Nothing executes
+// without passing this check.
+export async function checkTradingCaps(
+  conn: { id: string; user_id: string; daily_loss_limit_pct: number; max_positions: number },
+  adapter: ExchangeAdapter,
+  apiKey: string,
+  apiSecret: string,
+  opts: ConnectionOpts
+): Promise<CapCheck> {
+  const supabase = getServiceSupabase();
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  const { data: todayClosed } = await supabase
+    .from('auto_trades')
+    .select('pnl_net')
+    .eq('user_id', conn.user_id)
+    .eq('status', 'closed')
+    .gte('closed_at', startOfDay.toISOString());
+  const todayLoss = (todayClosed || []).reduce((acc: number, t: { pnl_net: number | null }) => acc + (t.pnl_net ?? 0), 0);
+
+  let balance = 0;
+  try {
+    const bal = await adapter.getBalanceUsdt!(apiKey, apiSecret, opts?.passphrase, opts);
+    balance = bal.balance;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'balance_fetch_failed', level: 'warn', message: msg });
+    return { ok: false, reason: 'balance_unavailable', todayLoss, capital: 0 };
+  }
+  const capital = balance > 0 ? balance : 10_000;
+  const brakeLimit = capital * (conn.daily_loss_limit_pct / 100);
+  if (todayLoss <= -brakeLimit) {
+    await supabase.from('exchange_connections').update({ status: 'paused', paused_reason: `daily loss brake (${conn.daily_loss_limit_pct}%) triggered` }).eq('id', conn.id);
+    await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'brake_triggered', level: 'critical', message: `daily loss ${todayLoss.toFixed(2)} <= limit ${brakeLimit.toFixed(2)}` });
+    await alertOperator('brake_triggered', `User ${conn.user_id} hit the daily loss brake (${todayLoss.toFixed(2)} USDT). Trading paused.`);
+    return { ok: false, reason: 'brake_triggered', todayLoss, capital };
+  }
+
+  const { count: openCount } = await supabase
+    .from('auto_trades')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', conn.user_id)
+    .in('status', ['pending', 'open']);
+  if ((openCount ?? 0) >= conn.max_positions) {
+    return { ok: false, reason: 'max_positions', todayLoss, capital };
+  }
+  return { ok: true, todayLoss, capital };
+}
+
+// Builds the trade plan for a signal against the LIVE market (same sizing
+// logic as the engine loop). Returns skipped=true with a reason when the
+// signal cannot be traded right now.
+export async function buildPlanForSignal(
+  conn: { id: string; user_id: string; position_pct: number; created_at?: string },
+  adapter: ExchangeAdapter,
+  apiKey: string,
+  apiSecret: string,
+  opts: ConnectionOpts,
+  signal: Record<string, unknown>,
+  cfg: EngineConfig,
+  capital: number
+): Promise<{ plan: ReturnType<typeof buildTradePlan>; marketPrice: number }> {
+  const symbol = String(signal.coin).replace('/', '').toUpperCase();
+  // Resilient price: Bybit -> OKX -> CoinGecko (Vercel IPs can be blocked by an exchange).
+  const marketPrice = await fetchMarketPrice(symbol);
+
+  // Safety window (first N executed trades OR first D days) — same as the loop.
+  const { count: executedCount } = await getServiceSupabase()
+    .from('auto_trades')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', conn.user_id)
+    .in('status', ['closed', 'open']);
+  const daysActive = (Date.now() - new Date(conn.created_at ?? Date.now()).getTime()) / 86_400_000;
+  const safetyActive = cfg.safety.enabled && (executedCount ?? 0) < cfg.safety.tradeCount && daysActive < cfg.safety.days;
+
+  const plan = buildTradePlan(signal as never, {
+    capitalUsd: capital,
+    positionPct: conn.position_pct,
+    marketPrice,
+    maxTolerancePct: cfg.tolerancePct,
+    safety: safetyActive ? { enabled: true, maxPct: cfg.safety.maxPct, tradesUsed: executedCount ?? 0, daysUsed: daysActive } : undefined,
+  });
+  return { plan, marketPrice };
+}
+
+// Places a protected entry (SL/TP attached) and records the trade. Shared by
+// the engine loop and the one-click button.
+export async function executePlan(
+  conn: { id: string; user_id: string; exchange: string; testnet?: boolean; mode?: string },
+  plan: ReturnType<typeof buildTradePlan>,
+  cfg: EngineConfig,
+  adapter: ExchangeAdapter,
+  apiKey: string,
+  apiSecret: string,
+  opts: ConnectionOpts,
+  signalId: string,
+  recordExecutedSignal = true
+): Promise<{ ok: boolean; tradeId?: string; error?: string }> {
+  const supabase = getServiceSupabase();
+  if (plan.skipped) return { ok: false, error: plan.skipReason ?? 'plan skipped' };
+
+  const placed = await adapter.placeProtectedEntry!(
+    { symbol: plan.symbol, side: plan.side, entryPrice: plan.entryPrice, slPrice: plan.slPrice, tpPrices: plan.tpPrices, quantity: plan.quantity, passphrase: opts?.passphrase },
+    apiKey,
+    apiSecret,
+    opts
+  );
+  if (!placed.ok || !placed.orderId) {
+    await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'order_rejected', level: 'error', message: `${plan.symbol}: ${placed.error}` });
+    await alertOperator('order_failed', `Order rejected for user ${conn.user_id} on ${conn.exchange} (${plan.symbol}): ${placed.error}`);
+    return { ok: false, error: placed.error ?? 'order rejected' };
+  }
+
+  const { data: inserted, error: insErr } = await supabase.from('auto_trades').insert({
+    user_id: conn.user_id,
+    connection_id: conn.id,
+    signal_id: signalId,
+    exchange: conn.exchange,
+    symbol: plan.symbol,
+    symbol_base: plan.symbol.replace(/USDT$/, ''),
+    side: plan.side,
+    entry_price: plan.entryPrice,
+    entry_sl_price: plan.slPrice,
+    entry_tp_prices: plan.tpPrices,
+    quantity: plan.quantity,
+    mode: conn.mode ?? 'auto',
+    commission_rate: cfg.commissionRate,
+    testnet: !!conn.testnet || process.env.TRADING_TESTNET_FORCE === 'true',
+    status: 'open',
+    exchange_trade_ids: [placed.orderId],
+  }).select('id').single();
+  if (insErr || !inserted) {
+    await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'trade_insert_failed', level: 'critical', message: insErr?.message ?? 'unknown', meta: { orderId: placed.orderId } });
+    await alertOperator('trade_insert_failed', `Order ${placed.orderId} placed but DB insert failed: ${insErr?.message}`);
+    return { ok: false, error: insErr?.message ?? 'insert failed' };
+  }
+  const tradeId = inserted.id;
+  if (recordExecutedSignal) {
+    await supabase.from('executed_signals').insert({ user_id: conn.user_id, signal_id: signalId, connection_id: conn.id });
+  }
+  await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'order_placed', message: `${plan.symbol} buy ${plan.quantity} @ ${plan.entryPrice} | SL ${plan.slPrice} | TP ${plan.tpPrices.join('/')}` });
+  return { ok: true, tradeId };
+}
+
 async function processConnection(
   conn: { id: string; user_id: string; exchange: string; api_key_enc: string; api_secret_enc: string; testnet?: boolean; mode: string; position_pct: number; max_positions: number; daily_loss_limit_pct: number; created_at?: string },
   cfg: EngineConfig
@@ -129,50 +288,9 @@ async function processConnection(
     return result;
   }
 
-  // --- Daily-loss brake (realized today, net of fees) ---
-  const startOfDay = new Date();
-  startOfDay.setUTCHours(0, 0, 0, 0);
-  const { data: todayClosed } = await supabase
-    .from('auto_trades')
-    .select('pnl_net')
-    .eq('user_id', conn.user_id)
-    .eq('status', 'closed')
-    .gte('closed_at', startOfDay.toISOString());
-  const todayLoss = (todayClosed || []).reduce((acc: number, t: { pnl_net: number | null }) => acc + (t.pnl_net ?? 0), 0);
-
-  let balance = 0;
-  try {
-    const bal = await adapter.getBalanceUsdt(apiKey, apiSecret, opts?.passphrase, opts);
-    balance = bal.balance;
-  } catch (e) {
-    await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'balance_fetch_failed', level: 'warn', message: e instanceof Error ? e.message : String(e) });
-    return result; // fail-safe: no execution without knowing the balance
-  }
-  const capital = balance > 0 ? balance : 10000; // fallback only for sizing math
-  const brakeLimit = capital * (conn.daily_loss_limit_pct / 100);
-  if (todayLoss <= -brakeLimit) {
-    await supabase.from('exchange_connections').update({ status: 'paused', paused_reason: `daily loss brake (${conn.daily_loss_limit_pct}%) triggered` }).eq('id', conn.id);
-    await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'brake_triggered', level: 'critical', message: `daily loss ${todayLoss.toFixed(2)} USDT <= limit ${brakeLimit.toFixed(2)}` });
-    await alertOperator('brake_triggered', `User ${conn.user_id} hit the daily loss brake on ${conn.exchange} (${todayLoss.toFixed(2)} USDT). Trading paused.`);
-    return result;
-  }
-
-  // --- Max open trades cap ---
-  const { count: openCount } = await supabase
-    .from('auto_trades')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', conn.user_id)
-    .in('status', ['pending', 'open']);
-  if ((openCount ?? 0) >= conn.max_positions) return result;
-
-  // --- Safety window: first N executed trades OR first D days ---
-  const { count: executedCount } = await supabase
-    .from('auto_trades')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', conn.user_id)
-    .in('status', ['closed', 'open']);
-  const daysActive = (Date.now() - new Date(conn.created_at ?? Date.now()).getTime()) / 86_400_000;
-  const safetyActive = cfg.safety.enabled && (executedCount ?? 0) < cfg.safety.tradeCount && daysActive < cfg.safety.days;
+  // Shared guards: daily-loss brake + balance + max open trades.
+  const caps = await checkTradingCaps(conn, adapter, apiKey, apiSecret, opts);
+  if (!caps.ok) return result;
 
   // --- Fresh signals, deduped ---
   const since = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
@@ -197,22 +315,13 @@ async function processConnection(
     if (executedSet.has(signal.id)) continue;
     if (signal.signal_type !== 'buy') continue; // v1: spot buys only
 
-    let marketPrice = 0;
+    let plan: ReturnType<typeof buildTradePlan>;
     try {
-      const tick = await adapter.getTickerPrice(signal.coin.replace('/', '').toUpperCase(), opts);
-      marketPrice = tick.price;
+      plan = (await buildPlanForSignal(conn, adapter, apiKey, apiSecret, opts, signal, cfg, caps.capital)).plan;
     } catch (e) {
       await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'ticker_failed', level: 'warn', message: e instanceof Error ? e.message : String(e) });
       continue;
     }
-
-    const plan = buildTradePlan(signal, {
-      capitalUsd: capital,
-      positionPct: conn.position_pct,
-      marketPrice,
-      maxTolerancePct: cfg.tolerancePct,
-      safety: safetyActive ? { enabled: true, maxPct: cfg.safety.maxPct, tradesUsed: executedCount ?? 0, daysUsed: daysActive } : undefined,
-    });
 
     if (plan.skipped) {
       // Permanent skips are recorded so we don't retry a bad signal forever.
@@ -226,25 +335,22 @@ async function processConnection(
     }
 
     planned += 1;
-    const baseRow = {
-      user_id: conn.user_id,
-      connection_id: conn.id,
-      signal_id: signal.id,
-      exchange: conn.exchange,
-      symbol: plan.symbol,
-      symbol_base: plan.symbol.replace(/USDT$/, ''),
-      side: plan.side,
-      entry_price: plan.entryPrice,
-      entry_sl_price: plan.slPrice,
-      entry_tp_prices: plan.tpPrices,
-      quantity: plan.quantity,
-      mode: conn.mode,
-      commission_rate: cfg.commissionRate,
-      testnet: !!conn.testnet,
-    };
     if (conn.mode === 'confirm') {
       const { error: insErr } = await supabase.from('auto_trades').insert({
-        ...baseRow,
+        user_id: conn.user_id,
+        connection_id: conn.id,
+        signal_id: signal.id,
+        exchange: conn.exchange,
+        symbol: plan.symbol,
+        symbol_base: plan.symbol.replace(/USDT$/, ''),
+        side: plan.side,
+        entry_price: plan.entryPrice,
+        entry_sl_price: plan.slPrice,
+        entry_tp_prices: plan.tpPrices,
+        quantity: plan.quantity,
+        mode: conn.mode,
+        commission_rate: cfg.commissionRate,
+        testnet: !!conn.testnet || process.env.TRADING_TESTNET_FORCE === 'true',
         status: 'pending',
         approval_expires_at: new Date(Date.now() + cfg.approvalExpiryMinutes * 60_000).toISOString(),
       });
@@ -258,29 +364,9 @@ async function processConnection(
       continue;
     }
 
-    // --- Auto mode: execute with protection ---
-    const placed = await adapter.placeProtectedEntry(
-      { symbol: plan.symbol, side: plan.side, entryPrice: plan.entryPrice, slPrice: plan.slPrice, tpPrices: plan.tpPrices, quantity: plan.quantity, passphrase: opts?.passphrase },
-      apiKey,
-      apiSecret,
-      opts
-    );
-    if (!placed.ok || !placed.orderId) {
-      await supabase.from('executed_signals').insert({ user_id: conn.user_id, signal_id: signal.id, connection_id: conn.id });
-      await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'order_rejected', level: 'error', message: `${plan.symbol}: ${placed.error}` });
-      await alertOperator('order_failed', `Order rejected for user ${conn.user_id} on ${conn.exchange} (${plan.symbol}): ${placed.error}`);
-      continue;
-    }
-    const { error: insErr2 } = await supabase.from('auto_trades').insert({ ...baseRow, status: 'open', exchange_trade_ids: [placed.orderId] });
-    if (insErr2) {
-      // The order is live on the exchange but we could not record it: critical.
-      await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'trade_insert_failed', level: 'critical', message: insErr2.message, meta: { orderId: placed.orderId } });
-      await alertOperator('trade_insert_failed', `Order ${placed.orderId} placed but DB insert failed for user ${conn.user_id}: ${insErr2.message}`);
-      continue;
-    }
-    await supabase.from('executed_signals').insert({ user_id: conn.user_id, signal_id: signal.id, connection_id: conn.id });
-    await logEvent({ user_id: conn.user_id, connection_id: conn.id, event_type: 'order_placed', message: `${plan.symbol} buy ${plan.quantity} @ ${plan.entryPrice} | SL ${plan.slPrice} | TP ${plan.tpPrices.join('/')}` });
-    result.executed += 1;
+    // --- Auto mode: execute with protection (shared helper) ---
+    const exec = await executePlan(conn, plan, cfg, adapter, apiKey, apiSecret, opts, signal.id);
+    if (exec.ok) result.executed += 1;
   }
   return result;
 }

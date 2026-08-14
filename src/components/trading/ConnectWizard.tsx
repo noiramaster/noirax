@@ -22,6 +22,8 @@ interface ConnectWizardProps {
   onBack: () => void;
   /** Affiliate/referral signup URL for the exchange (from affiliate_links), falls back to the official one. */
   signupUrl?: string;
+  /** Paper mode: simulated 10,000 USDT, no exchange, no keys. */
+  paperMode?: boolean;
 }
 
 // Onboarding order: the user configures EVERYTHING (mode, profile, brake, legal)
@@ -32,7 +34,7 @@ type Step = 'mode' | 'profile' | 'brake' | 'legal' | 'credentials' | 'done';
 
 const PRESET_IDS: RiskProfile[] = ['conservative', 'moderate', 'aggressive', 'small_frequent'];
 
-export default function ConnectWizard({ exchange, config, onConnected, onBack, signupUrl }: ConnectWizardProps) {
+export default function ConnectWizard({ exchange, config, onConnected, onBack, signupUrl, paperMode = false }: ConnectWizardProps) {
   const lang = getLang();
   const [step, setStep] = useState<Step>('mode');
   const [apiKey, setApiKey] = useState('');
@@ -52,8 +54,8 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
     : { positionPct: preset?.positionPct ?? 10, dailyLossLimitPct: preset?.dailyLossLimitPct ?? 5, maxPositions: preset?.maxPositions ?? 5 };
 
   const stepBar = (): string => {
-    const order: Step[] = ['mode', 'profile', 'brake', 'legal', 'credentials'];
-    return `[${order.indexOf(step) + 1}/5]`;
+    const order: Step[] = paperMode ? ['mode', 'profile', 'brake', 'legal'] : ['mode', 'profile', 'brake', 'legal', 'credentials'];
+    return `[${order.indexOf(step) + 1}/${order.length}]`;
   };
 
   const handleConnect = async () => {
@@ -70,10 +72,10 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
-        exchange: exchange.id,
-        apiKey,
-        apiSecret,
-        passphrase: exchange.needsPassphrase ? passphrase : undefined,
+        exchange: paperMode ? 'paper' : exchange.id,
+        apiKey: paperMode ? '' : apiKey,
+        apiSecret: paperMode ? '' : apiSecret,
+        passphrase: !paperMode && exchange.needsPassphrase ? passphrase : undefined,
         mode,
         profile,
         positionPct: profile === 'advanced' ? advancedValues.positionPct : undefined,
@@ -89,8 +91,8 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
       setSubmitting(false);
       return;
     }
+    setSubmitting(false);
     setStep('done');
-    onConnected();
   };
 
   const inputCls = 'w-full bg-black border border-border rounded px-3 py-2 text-sm font-mono text-foreground focus:border-accent-green outline-none';
@@ -130,7 +132,13 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
 
   return (
     <div className="max-w-3xl mx-auto">
-      <p className="text-xs text-muted font-mono mb-4">{stepBar()} &gt; {exchange.name}</p>
+      <p className="text-xs text-muted font-mono mb-4">{stepBar()} &gt; {paperMode ? t('trading.paper.title', lang) : exchange.name}</p>
+
+      {paperMode && (
+        <div className="border border-yellow-400/60 rounded p-3 mb-4 text-[11px] font-mono text-yellow-400">
+          ⚠ {t('trading.paper.banner', lang)}
+        </div>
+      )}
 
       {step === 'mode' && (
         <div className="border border-border rounded p-6 space-y-3">
@@ -225,14 +233,14 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
           </label>
           <div className="flex gap-3">
             <button onClick={() => setStep('brake')} className={btnGhost}>{t('common.backToHome', lang)}</button>
-            <button onClick={() => setStep('credentials')} className={btnPrimary} disabled={!legalAccepted}>
-              {t('trading.guideContinue', lang)}
+            <button onClick={() => (paperMode ? handleConnect() : setStep('credentials'))} className={btnPrimary} disabled={!legalAccepted || submitting}>
+              {submitting ? t('trading.connecting', lang) : paperMode ? t('trading.paper.start', lang) : t('trading.guideContinue', lang)}
             </button>
           </div>
         </div>
       )}
 
-      {step === 'credentials' && (
+      {!paperMode && step === 'credentials' && (
         <div className="border border-border rounded p-6 space-y-4">
           <h2 className="font-mono text-xl text-accent-green">&gt; {t('trading.stepCredentials', lang)}</h2>
           {/* 1. Escape hatches first: create account / generate API key (no dead ends) */}
@@ -280,9 +288,11 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
         <div className="border border-accent-green rounded p-6 space-y-4 text-center">
           <h2 className="font-mono text-2xl text-accent-green">&gt; {t('trading.done', lang)}</h2>
           <p className="text-sm text-muted font-mono">{t('trading.doneText', lang)}</p>
+          {paperMode && <p className="text-[11px] text-yellow-400 font-mono">⚠ {t('trading.paper.badge', lang)}</p>}
           <p className="text-xs text-muted font-mono">
             {t('trading.dashboard.commission', lang).replace('{rate}', String(Math.round((config.commissionRate || 0.25) * 100)))}
           </p>
+          <button onClick={onConnected} className={btnPrimary}>{t('trading.dashboard.title', lang)}</button>
         </div>
       )}
     </div>

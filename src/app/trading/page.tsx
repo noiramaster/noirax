@@ -26,8 +26,20 @@ export default function TradingPage() {
   const [connections, setConnections] = useState<ExchangeConnection[]>([]);
   const [affiliateLinks, setAffiliateLinks] = useState<Record<string, string>>({});
   const [selectedExchange, setSelectedExchange] = useState<string | null>(null);
+  const [paperMode, setPaperMode] = useState(false);
   const [exchangeFilter, setExchangeFilter] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const refreshConnections = async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) return;
+    const resp = await fetch('/api/trading/connections', { headers: { Authorization: `Bearer ${token}` } });
+    if (resp.ok) {
+      const data = await resp.json();
+      setConnections(data.connections || []);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +137,10 @@ export default function TradingPage() {
   if (!user) return null;
 
   const connectedIds = new Set(connections.filter((c) => c.status !== 'revoked').map((c) => c.exchange));
+  const PAPER_EXCHANGE = {
+    id: 'paper', name: 'Modo Prueba', signupUrl: '', apiKeyUrl: '', docsUrl: '',
+    hasAffiliate: false, supportsSpot: true, supportsFutures: false, needsPassphrase: false,
+  };
   const exchangeCard = (id: string) => {
     const info = getExchangeInfo(id);
     if (!info) return null;
@@ -169,17 +185,18 @@ export default function TradingPage() {
       <h1 className="font-mono text-3xl text-accent-green mb-2">&gt; {t('trading.title', lang)}</h1>
       <p className="text-sm text-muted mb-8 font-mono">{t('trading.subtitle', lang)}</p>
 
-      {selectedExchange ? (
+      {selectedExchange || paperMode ? (
         <>
-          <button onClick={() => setSelectedExchange(null)} className="text-xs text-muted font-mono mb-4 hover:text-foreground">
+          <button onClick={() => { setSelectedExchange(null); setPaperMode(false); }} className="text-xs text-muted font-mono mb-4 hover:text-foreground">
             &lt; {t('trading.backToExchange', lang)}
           </button>
           <ConnectWizard
-            exchange={getExchangeInfo(selectedExchange)!}
+            exchange={paperMode ? PAPER_EXCHANGE : (selectedExchange ? getExchangeInfo(selectedExchange)! : PAPER_EXCHANGE)}
             config={config}
-            signupUrl={affiliateLinks[selectedExchange] || getExchangeInfo(selectedExchange)?.signupUrl}
-            onConnected={() => setSelectedExchange(null)}
-            onBack={() => setSelectedExchange(null)}
+            paperMode={paperMode}
+            signupUrl={selectedExchange ? (affiliateLinks[selectedExchange] || getExchangeInfo(selectedExchange)?.signupUrl) : ''}
+            onConnected={() => { setSelectedExchange(null); setPaperMode(false); refreshConnections(); }}
+            onBack={() => { setSelectedExchange(null); setPaperMode(false); }}
           />
         </>
       ) : connections.length > 0 ? (
@@ -187,18 +204,29 @@ export default function TradingPage() {
           {/* ---------- Dashboard ---------- */}
           <div className="space-y-6">
             {connections.map((conn) => {
-              const info = getExchangeInfo(conn.exchange);
+              const info = conn.exchange === 'paper' ? PAPER_EXCHANGE : getExchangeInfo(conn.exchange);
               const preset = conn.profile in RISK_PROFILES ? (RISK_PROFILES as Record<string, { labelKey: string }>)[conn.profile] : undefined;
+              const isPaper = conn.exchange === 'paper';
               return (
                 <div key={conn.id} className="border border-border rounded p-5 space-y-4">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="w-8 h-8 flex items-center justify-center border border-accent-green text-accent-green font-mono text-sm rounded">{info?.name[0] || '?'}</span>
                     <h2 className="font-mono text-lg text-foreground">{info?.name || conn.exchange}</h2>
+                    {isPaper && (
+                      <span className="text-[10px] border border-yellow-400/60 text-yellow-400 px-2 py-0.5 rounded font-mono">
+                        {t('trading.paper.badge', lang)}
+                      </span>
+                    )}
                     <span className={`text-[10px] border px-2 py-0.5 rounded font-mono ${conn.status === 'paused' ? 'border-accent-red text-accent-red' : 'border-accent-green text-accent-green'}`}>
                       {conn.status === 'paused' ? t('trading.dashboard.paused', lang) : t('trading.dashboard.active', lang)}
                     </span>
                     {conn.paused_reason && <span className="text-[10px] text-muted font-mono">{t('trading.dashboard.pausedReason', lang).replace('{reason}', conn.paused_reason)}</span>}
                   </div>
+                  {isPaper && (
+                    <p className="text-[11px] text-yellow-400 font-mono">
+                      {t('trading.paper.balance', lang)}
+                    </p>
+                  )}
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
                     <div className="border border-border rounded p-3">
@@ -277,7 +305,7 @@ export default function TradingPage() {
         </>
       ) : (
         <>
-          {/* ---------- How it works + exchange grid ---------- */}
+          {/* ---------- How it works + paper mode + exchange grid ---------- */}
           <div className="border border-border rounded p-5 mb-6">
             <h2 className="font-mono text-sm text-accent-green mb-3">&gt; {t('trading.howItWorksTitle', lang)}</h2>
             <ul className="space-y-2 text-xs text-terminal-text font-mono">
@@ -289,6 +317,21 @@ export default function TradingPage() {
               {t('trading.dashboard.commission', lang).replace('{rate}', String(Math.round((config.commissionRate || 0.25) * 100)))}
             </p>
           </div>
+
+          <div className="border border-yellow-400/60 rounded p-5 mb-6 flex flex-col md:flex-row md:items-center gap-4">
+            <div className="flex-1">
+              <h2 className="font-mono text-lg text-yellow-400">&gt; {t('trading.paper.title', lang)}</h2>
+              <p className="text-xs text-terminal-text font-mono mt-1">{t('trading.paper.ctaDesc', lang)}</p>
+              <p className="text-[11px] text-muted font-mono mt-1">{t('trading.paper.disclaimer', lang)}</p>
+            </div>
+            <button
+              onClick={() => setPaperMode(true)}
+              className="border border-yellow-400/60 text-yellow-400 px-4 py-2 rounded text-sm font-mono hover:bg-yellow-400 hover:text-black transition-colors cursor-pointer"
+            >
+              {t('trading.paper.start', lang)}
+            </button>
+          </div>
+
           <h2 className="font-mono text-xl text-accent-green mb-4">&gt; {t('trading.selectExchange', lang)}</h2>
           <input
             type="text"

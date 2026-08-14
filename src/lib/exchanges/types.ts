@@ -51,6 +51,8 @@ export interface ExchangeAdapter {
 export interface ConnectionOpts {
   testnet?: boolean;
   passphrase?: string;
+  /** Paper-exchange connection id (simulated trading). */
+  connectionId?: string;
 }
 
 export interface ExchangeInfo {

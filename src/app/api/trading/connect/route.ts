@@ -27,13 +27,15 @@ export async function POST(request: NextRequest) {
   const apiSecret = String(body.apiSecret || '').trim();
   const passphrase = body.passphrase ? String(body.passphrase).trim() : undefined;
 
-  if (!getExchangeInfo(exchange)) {
+  // Paper mode: no exchange, no keys — simulated 10,000 USDT.
+  const isPaper = exchange === 'paper';
+  if (!isPaper && !getExchangeInfo(exchange)) {
     return NextResponse.json({ error: `Unsupported exchange: ${exchange}` }, { status: 400 });
   }
-  if (!apiKey || !apiSecret) {
+  if (!isPaper && (!apiKey || !apiSecret)) {
     return NextResponse.json({ error: 'API Key and API Secret are required.' }, { status: 400 });
   }
-  if (apiKey.length < 8 || apiSecret.length < 8) {
+  if (!isPaper && (apiKey.length < 8 || apiSecret.length < 8)) {
     return NextResponse.json({ error: 'API Key and API Secret look too short — double-check them.' }, { status: 400 });
   }
 
@@ -78,22 +80,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // --- Encrypt before anything touches the database ---
-  let keyEnc: string;
-  let secretEnc: string;
-  try {
-    keyEnc = await encryptSecretAsync(apiKey);
-    secretEnc = await encryptSecretAsync(apiSecret);
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Encryption key not configured.' },
-      { status: 500 }
-    );
+  // --- Encrypt before anything touches the database (paper mode skips keys) ---
+  let keyEnc = 'paper';
+  let secretEnc = 'paper';
+  if (!isPaper) {
+    try {
+      keyEnc = await encryptSecretAsync(apiKey);
+      secretEnc = await encryptSecretAsync(apiSecret);
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : 'Encryption key not configured.' },
+        { status: 500 }
+      );
+    }
   }
 
   // --- Credential validation (real per-exchange signing; never blocks saving) ---
   let validationError: string | null = null;
-  const adapter = getAdapter(exchange);
+  const adapter = isPaper ? undefined : getAdapter(exchange);
   if (adapter) {
     try {
       const result = await adapter.testConnection(apiKey, apiSecret, passphrase);
@@ -112,7 +116,7 @@ export async function POST(request: NextRequest) {
       exchange,
       api_key_enc: keyEnc,
       api_secret_enc: secretEnc,
-      key_hint: apiKey.slice(-4),
+      key_hint: isPaper ? 'PAPER' : apiKey.slice(-4),
       mode,
       profile,
       position_pct: positionPct,
