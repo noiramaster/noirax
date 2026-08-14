@@ -1512,6 +1512,7 @@ def main():
             "timeframe": DEFAULT_TIMEFRAME,
             "resolved_result": "pending",
             "slug": slug,
+            "coingecko_id": item.get("coingecko_id", ""),
             # Both conservative and optimized levels stored for frontend differentiation
             "stop_loss_conservative": tps["stop_loss_conservative"],
             "take_profit_1_conservative": tps["take_profit_1_conservative"],
