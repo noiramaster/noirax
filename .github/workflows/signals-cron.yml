@@ -50,9 +50,12 @@ jobs:
           SIGNALS_MIN_VOLUME_24H_USD: ${{ secrets.SIGNALS_MIN_VOLUME_24H_USD || '999999999' }}
 
       - name: Heartbeat - commit status
+        env:
+          PUSH_TOKEN: ${{ secrets.REPO_PUSH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "noirax-bot"
           git config user.email "bot@noirax.ai"
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/noiramaster/noirax.git"
           git add pipeline/status.json
           git diff --quiet && git diff --staged --quiet || git commit -m "chore: pipeline heartbeat [skip ci]"
           git push origin master || echo "No changes to push"

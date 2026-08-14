@@ -1015,7 +1015,7 @@ def _iter_pending_signals(supabase_client, budget_seconds: int = 240):
             supabase_client.table("signals")
             .select("*")
             .eq("resolved_result", "pending")
-            .order("created_at", ascending=True)
+            .order("created_at", desc=False)
             .range(offset, offset + page_size - 1)
             .execute()
         )
