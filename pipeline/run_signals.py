@@ -50,6 +50,15 @@ MARKET_REGIME_UP_PCT = abs(float(os.environ.get("TECH_REGIME_UP_PCT", "2.0")))
 SIGNALS_MAX_AGE_DAYS = int(os.environ.get("SIGNALS_MAX_AGE_DAYS", "7"))
 GEMINI_MAX_WAIT_SECONDS = int(os.environ.get("GEMINI_MAX_WAIT_SECONDS", "30"))
 
+# Automatic low-volatility filter (Mejora 8): stablecoins and other flat
+# instruments are excluded by measuring real historical volatility — no manual
+# list. A coin must move at least MIN_ATR_PCT% per candle on average (ATR/price)
+# AND span at least MIN_RANGE_PCT% across its recent candles (last 20 by
+# default) or it produces no meaningful signal.
+MIN_ATR_PCT = float(os.environ.get("TECH_MIN_ATR_PCT", "0.10"))
+MIN_RANGE_PCT = float(os.environ.get("TECH_MIN_RANGE_PCT", "0.25"))
+MIN_ATR_VOLATILITY_CANDLES = int(os.environ.get("TECH_MIN_ATR_VOLATILITY_CANDLES", "14"))
+
 # Proprietary technical parameters (from GitHub Secrets / env)
 RSI_OVERSOLD = int(os.environ.get("TECH_RSI_OVERSOLD", "0"))
 RSI_OVERBOUGHT = int(os.environ.get("TECH_RSI_OVERBOUGHT", "100"))
@@ -434,6 +443,52 @@ def calculate_indicators(df: pd.DataFrame, volume_24h: float = 0) -> dict:
     }
 
 
+def check_min_volatility(analysis: dict, coin_symbol: str, df: Optional[pd.DataFrame] = None) -> tuple[bool, str]:
+    """Reject coins with insufficient historical volatility (stablecoin filter).
+
+    Automatic: uses the coin's OWN candles, never a manual list of names.
+    A coin is excluded when either:
+      - ATR / price < MIN_ATR_PCT (%): average candle movement is too small
+        (smoothed True-Range mean over the last MIN_ATR_VOLATILITY_CANDLES).
+      - (optional, when real OHLC is available) the high-low range of the last
+        20 candles is < MIN_RANGE_PCT (%): essentially no price movement.
+    Returns (True, "") if tradeable, (False, reason) if excluded.
+    """
+    price = analysis.get("current_price") or 0
+    if price <= 0:
+        return False, "no usable price for volatility check"
+
+    atr = analysis.get("atr") or 0
+    if df is not None and len(df) >= 2:
+        # Smoothed ATR: mean of the True Range over the last N candles
+        highs = df["high"].to_numpy(dtype=float)
+        lows = df["low"].to_numpy(dtype=float)
+        closes = df["close"].to_numpy(dtype=float)
+        prev_close = np.roll(closes, 1)
+        prev_close[0] = closes[0]
+        trs = np.maximum(
+            highs - lows,
+            np.maximum(np.abs(highs - prev_close), np.abs(lows - prev_close)),
+        )
+        n = min(MIN_ATR_VOLATILITY_CANDLES, len(trs))
+        atr = float(np.mean(trs[-n:]))
+
+    atr_pct = (atr / price) * 100
+    if atr_pct < MIN_ATR_PCT:
+        return False, f"ATR/price {atr_pct:.4f}% below min {MIN_ATR_PCT}% (low volatility — stable-like instrument)"
+
+    if df is not None and len(df) >= 20:
+        window = df.tail(20)
+        hi = float(window["high"].max())
+        lo = float(window["low"].min())
+        if lo > 0:
+            range_pct = (hi - lo) / lo * 100
+            if range_pct < MIN_RANGE_PCT:
+                return False, f"last-20-candle range {range_pct:.4f}% below min {MIN_RANGE_PCT}% (flat instrument)"
+
+    return True, ""
+
+
 def fetch_coingecko_ohlc(coingecko_id: str, interval: str = "1h") -> Optional[pd.DataFrame]:
     """Fetch real OHLC historical data from CoinGecko for a single coin.
     
@@ -806,7 +861,9 @@ def calculate_simple_signal(coin: dict) -> Optional[dict]:
     if signal_type == "neutral":
         return None
 
-    atr = abs(price * change_24h / 100) if change_24h != 0 else price * 0.01
+    # Proxy ATR from 24h change; for flat coins (change ~0) report a tiny
+    # movement instead of a fake 1% so the volatility gate can exclude them.
+    atr = abs(price * change_24h / 100) if change_24h != 0 else price * 0.001
 
     return {
         "signal_type": signal_type,
@@ -865,15 +922,19 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
     if ohlc_1h is not None and len(ohlc_1h) >= 20:
         swing = calculate_indicators(ohlc_1h, volume_24h=volume_24h)
         if swing["signal_type"] != "neutral":
-            swing["duration_type"] = "swing"
-            tps = calculate_dual_tps(swing["current_price"], swing["atr"], swing["signal_type"])
-            extras.append({
-                "coin": coin_display, "coin_symbol": coin_symbol,
-                "tier": tier, "analysis": swing, "tps": tps,
-                "fundamental": fund_result, "timestamp": timestamp,
-                "coingecko_id": cg_id, "duration_type": "swing",
-            })
-            logger.info(f"Swing signal for {coin_symbol}: {swing['signal_type']} RSI={swing['rsi']}")
+            ok_vol, vol_reason = check_min_volatility(swing, coin_symbol, ohlc_1h)
+            if not ok_vol:
+                logger.info(f"Skipping {coin_symbol} swing: {vol_reason}")
+            else:
+                swing["duration_type"] = "swing"
+                tps = calculate_dual_tps(swing["current_price"], swing["atr"], swing["signal_type"])
+                extras.append({
+                    "coin": coin_display, "coin_symbol": coin_symbol,
+                    "tier": tier, "analysis": swing, "tps": tps,
+                    "fundamental": fund_result, "timestamp": timestamp,
+                    "coingecko_id": cg_id, "duration_type": "swing",
+                })
+                logger.info(f"Swing signal for {coin_symbol}: {swing['signal_type']} RSI={swing['rsi']}")
     
     # 2. SCALPING (15min from 5-min OHLC)
     try:
@@ -896,15 +957,19 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                 if len(df_15m) >= 20:
                     scalping = calculate_indicators(df_15m, volume_24h=volume_24h)
                     if scalping["signal_type"] != "neutral":
-                        scalping["duration_type"] = "scalping"
-                        tps = calculate_dual_tps(scalping["current_price"], scalping["atr"], scalping["signal_type"])
-                        extras.append({
-                            "coin": coin_display, "coin_symbol": coin_symbol,
-                            "tier": tier, "analysis": scalping, "tps": tps,
-                            "fundamental": fund_result, "timestamp": timestamp,
-                            "coingecko_id": cg_id, "duration_type": "scalping",
-                        })
-                        logger.info(f"Scalping signal for {coin_symbol}: {scalping['signal_type']} RSI={scalping['rsi']} (15min from 5-min OHLC)")
+                        ok_vol, vol_reason = check_min_volatility(scalping, coin_symbol, df_15m)
+                        if not ok_vol:
+                            logger.info(f"Skipping {coin_symbol} scalping: {vol_reason}")
+                        else:
+                            scalping["duration_type"] = "scalping"
+                            tps = calculate_dual_tps(scalping["current_price"], scalping["atr"], scalping["signal_type"])
+                            extras.append({
+                                "coin": coin_display, "coin_symbol": coin_symbol,
+                                "tier": tier, "analysis": scalping, "tps": tps,
+                                "fundamental": fund_result, "timestamp": timestamp,
+                                "coingecko_id": cg_id, "duration_type": "scalping",
+                            })
+                            logger.info(f"Scalping signal for {coin_symbol}: {scalping['signal_type']} RSI={scalping['rsi']} (15min from 5-min OHLC)")
     except Exception as e:
         logger.debug(f"OHLC 5-min error for {cg_id}: {e}")
     
@@ -929,15 +994,19 @@ def generate_multi_timeframe_signals(coin_symbol: str, cg_id: str, tier: str,
                 if len(df_1d) >= 14:
                     long_term = calculate_indicators(df_1d, volume_24h=volume_24h)
                     if long_term["signal_type"] != "neutral":
-                        long_term["duration_type"] = "long"
-                        tps = calculate_dual_tps(long_term["current_price"], long_term["atr"], long_term["signal_type"])
-                        extras.append({
-                            "coin": coin_display, "coin_symbol": coin_symbol,
-                            "tier": tier, "analysis": long_term, "tps": tps,
-                            "fundamental": fund_result, "timestamp": timestamp,
-                            "coingecko_id": cg_id, "duration_type": "long",
-                        })
-                        logger.info(f"Long-term signal for {coin_symbol}: {long_term['signal_type']} RSI={long_term['rsi']} (daily from 4h OHLC)")
+                        ok_vol, vol_reason = check_min_volatility(long_term, coin_symbol, df_1d)
+                        if not ok_vol:
+                            logger.info(f"Skipping {coin_symbol} long: {vol_reason}")
+                        else:
+                            long_term["duration_type"] = "long"
+                            tps = calculate_dual_tps(long_term["current_price"], long_term["atr"], long_term["signal_type"])
+                            extras.append({
+                                "coin": coin_display, "coin_symbol": coin_symbol,
+                                "tier": tier, "analysis": long_term, "tps": tps,
+                                "fundamental": fund_result, "timestamp": timestamp,
+                                "coingecko_id": cg_id, "duration_type": "long",
+                            })
+                            logger.info(f"Long-term signal for {coin_symbol}: {long_term['signal_type']} RSI={long_term['rsi']} (daily from 4h OHLC)")
     except Exception as e:
         logger.debug(f"OHLC 4h error for {cg_id}: {e}")
     
@@ -1346,6 +1415,16 @@ def main():
                 if analysis["signal_type"] == "neutral":
                     continue
 
+            # Mejora 8: automatic low-volatility filter — excludes stablecoins
+            # and any flat instrument using its own candles, no manual list.
+            # (In klines mode the real OHLC is already in hand; in CoinGecko
+            # fallback mode the gate runs below after enhance_with_real_ohlc.)
+            if not market_data_blocked:
+                ok_vol, vol_reason = check_min_volatility(analysis, coin_symbol, df)
+                if not ok_vol:
+                    logger.info(f"Skipping {coin_symbol}: {vol_reason}")
+                    continue
+
             # Fundamental analysis (all 4 sources)
             if market_data_blocked:
                 fund_result = analyze_fundamental(coin_symbol, coin_data.get("name", ""), coin_data)
@@ -1393,6 +1472,14 @@ def main():
                     if enhanced != analysis:
                         logger.info(f"Enhanced {coin_symbol} with real OHLC indicators")
                     analysis = enhanced
+                else:
+                    logger.debug(f"{coin_symbol} has no coingecko_id; using proxy ATR for volatility gate")
+
+                # Mejora 8: low-volatility gate on the REAL enhanced data
+                ok_vol, vol_reason = check_min_volatility(analysis, coin_symbol)
+                if not ok_vol:
+                    logger.info(f"Skipping {coin_symbol}: {vol_reason}")
+                    continue
 
             # Calculate dual TP/SL levels for the snapshot analysis (used as fallback)
             tps = calculate_dual_tps(analysis["current_price"], analysis["atr"], analysis["signal_type"])

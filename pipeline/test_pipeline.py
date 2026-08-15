@@ -49,6 +49,7 @@ from run_signals import (
     generate_fallback_explanations,
     get_top_coins,
     create_slug,
+    check_min_volatility,
 )
 from fundamental_analysis import analyze_fundamental
 
@@ -206,6 +207,64 @@ class TestCalculateDualTPs:
         tps = calculate_dual_tps(50000.0, 1000.0, "buy")
         assert tps["entry_price_min"] < 50000.0
         assert tps["entry_price_max"] > 50000.0
+
+
+class TestCheckMinVolatility:
+    """Stablecoin auto-filter: flat candles must be rejected, moving ones kept."""
+
+    def _flat_klines(self, base=1.0, length=200, noise=0.0003):
+        """Series that moves less than MIN_ATR_PCT per candle (stable-like)."""
+        close = base + np.cumsum(np.random.randn(length)) * noise
+        data = {
+            "timestamp": pd.date_range(start="2024-01-01", periods=length, freq="h"),
+            "open": close - 0.0001,
+            "high": close + 0.0004,
+            "low": close - 0.0004,
+            "close": close,
+            "volume": np.random.rand(length) * 1000 + 500,
+        }
+        return pd.DataFrame(data)
+
+    def test_flat_series_rejected(self):
+        df = self._flat_klines()
+        ok, reason = check_min_volatility({"current_price": 1.0, "atr": 0.0004}, "USDSUSDT", df)
+        assert ok is False
+        assert "ATR/price" in reason or "range" in reason
+
+    def test_volatile_series_accepted(self):
+        df = create_sample_klines()
+        analysis = calculate_indicators(df)
+        ok, reason = check_min_volatility(analysis, "BTCUSDT", df)
+        assert ok is True, reason
+
+    def test_range_check_rejects_flat_tail(self):
+        """Choppy oscillation: passes ATR but barely spans any overall range."""
+        length = 100
+        close = 1.0 + np.array([0.0015 if i % 2 == 0 else 0.0 for i in range(length)])
+        data = {
+            "timestamp": pd.date_range(start="2024-01-01", periods=length, freq="h"),
+            "open": close,
+            "high": close + 0.0004,
+            "low": close - 0.0004,
+            "close": close,
+            "volume": np.random.rand(length) * 1000 + 500,
+        }
+        df = pd.DataFrame(data)
+        analysis = {"current_price": 1.0, "atr": 0.05}
+        ok, reason = check_min_volatility(analysis, "USD1USDT", df)
+        assert ok is False
+        assert "range" in reason
+
+    def test_proxy_atr_without_df(self):
+        ok, _ = check_min_volatility({"current_price": 100.0, "atr": 0.05}, "FLAUSDT")
+        assert ok is False
+        ok, _ = check_min_volatility({"current_price": 100.0, "atr": 5.0}, "BTCUSDT")
+        assert ok is True
+
+    def test_no_price_rejected(self):
+        ok, reason = check_min_volatility({"current_price": 0, "atr": 0.01}, "XUSDT")
+        assert ok is False
+        assert "price" in reason
 
 
 class TestFundamentalAnalysis:
