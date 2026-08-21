@@ -128,7 +128,7 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
         <Link href={`/track-record?coin=${encodeURIComponent(signal.coin)}`} className="text-muted hover:text-foreground">
           {t('signal.viewOnTrackRecord', lang)}
         </Link>
-        {!isPremium && signal.signal_type === 'buy' && <OneClickTrade signal={signal} />}
+        {signal.signal_type === 'buy' && <OneClickTrade signal={signal} />}
       </div>
     </div>
   );
