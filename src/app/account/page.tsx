@@ -1,14 +1,15 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 
 export default function AccountPage() {
-  const lang = getLang();
+  const lang = useLang();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);

@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import { HARD_CAPS, RISK_PROFILES, LEGAL_VERSION, DEFAULT_MODE } from '@/lib/trading';
 import type { RiskProfile, TradingMode } from '@/lib/trading';
@@ -35,7 +36,7 @@ type Step = 'mode' | 'profile' | 'brake' | 'legal' | 'credentials' | 'done';
 const PRESET_IDS: RiskProfile[] = ['conservative', 'moderate', 'aggressive', 'small_frequent'];
 
 export default function ConnectWizard({ exchange, config, onConnected, onBack, signupUrl, paperMode = false }: ConnectWizardProps) {
-  const lang = getLang();
+  const lang = useLang();
   const [step, setStep] = useState<Step>('mode');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
@@ -135,7 +136,7 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
 
       {paperMode && (
         <div className="border border-yellow-400/60 rounded p-3 mb-4 text-[11px] font-mono text-yellow-400">
-          ⚠ {t('trading.paper.banner', lang)}
+          âš  {t('trading.paper.banner', lang)}
         </div>
       )}
 
@@ -178,15 +179,15 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
           {profile === 'advanced' && (
             <div className="space-y-3 border border-border rounded p-4">
               <div>
-                <label className="text-xs text-muted font-mono block mb-1">{t('trading.positionPct', lang)} (1–{config.caps.maxPositionPct}%)</label>
+                <label className="text-xs text-muted font-mono block mb-1">{t('trading.positionPct', lang)} (1â€“{config.caps.maxPositionPct}%)</label>
                 <input type="number" min={1} max={config.caps.maxPositionPct} value={advancedValues.positionPct} onChange={(e) => setAdvancedValues({ ...advancedValues, positionPct: Math.min(config.caps.maxPositionPct, Math.max(1, Number(e.target.value) || 1)) })} className={inputCls} />
               </div>
               <div>
-                <label className="text-xs text-muted font-mono block mb-1">{t('trading.dailyLoss', lang)} ({config.caps.dailyLossMinPct}–{config.caps.dailyLossMaxPct}%)</label>
+                <label className="text-xs text-muted font-mono block mb-1">{t('trading.dailyLoss', lang)} ({config.caps.dailyLossMinPct}â€“{config.caps.dailyLossMaxPct}%)</label>
                 <input type="number" min={config.caps.dailyLossMinPct} max={config.caps.dailyLossMaxPct} value={advancedValues.dailyLossLimitPct} onChange={(e) => setAdvancedValues({ ...advancedValues, dailyLossLimitPct: Math.min(config.caps.dailyLossMaxPct, Math.max(config.caps.dailyLossMinPct, Number(e.target.value) || 1)) })} className={inputCls} />
               </div>
               <div>
-                <label className="text-xs text-muted font-mono block mb-1">{t('trading.maxPositions', lang)} (1–{config.caps.maxPositions})</label>
+                <label className="text-xs text-muted font-mono block mb-1">{t('trading.maxPositions', lang)} (1â€“{config.caps.maxPositions})</label>
                 <input type="number" min={1} max={config.caps.maxPositions} value={advancedValues.maxPositions} onChange={(e) => setAdvancedValues({ ...advancedValues, maxPositions: Math.min(config.caps.maxPositions, Math.max(1, Number(e.target.value) || 1)) })} className={inputCls} />
               </div>
               <p className="text-[11px] text-accent-red font-mono">{t('trading.advancedCapsNote', lang).replace('{pos}', String(config.caps.maxPositionPct)).replace('{loss}', String(config.caps.dailyLossMaxPct)).replace('{max}', String(config.caps.maxPositions))}</p>
@@ -295,7 +296,7 @@ export default function ConnectWizard({ exchange, config, onConnected, onBack, s
         <div className="border border-accent-green rounded p-6 space-y-4 text-center">
           <h2 className="font-mono text-2xl text-accent-green">&gt; {t('trading.done', lang)}</h2>
           <p className="text-sm text-muted font-mono">{t('trading.doneText', lang)}</p>
-          {paperMode && <p className="text-[11px] text-yellow-400 font-mono">⚠ {t('trading.paper.badge', lang)}</p>}
+          {paperMode && <p className="text-[11px] text-yellow-400 font-mono">âš  {t('trading.paper.badge', lang)}</p>}
           <p className="text-xs text-muted font-mono">
             {t('trading.dashboard.commission', lang).replace('{rate}', String(Math.round((config.commissionRate || 0.25) * 100)))}
           </p>

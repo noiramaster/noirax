@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getLang, t, isRTL } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
 import { cleanExplanation } from '@/lib/signalText';
 import TermTooltip from '@/components/TermTooltip';
 import TradingViewChart from '@/components/TradingViewChart';
@@ -20,7 +21,7 @@ interface SignalDetailClientProps {
 }
 
 export default function SignalDetailClient({ signal }: SignalDetailClientProps) {
-  const lang = getLang();
+  const lang = useLang();
   const rtl = isRTL(lang);
   const isBuy = signal.signal_type === 'buy';
   const accentColor = isBuy ? 'text-accent-green' : 'text-accent-red';

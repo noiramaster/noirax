@@ -1,12 +1,13 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 
 export default function TerminalTicker() {
   const [displayText, setDisplayText] = useState('');
   const [showCursor, setShowCursor] = useState(true);
-  const lang = getLang();
+  const lang = useLang();
   const fullText = `> ${t('home.typingText', lang)}`;
 
   useEffect(() => {

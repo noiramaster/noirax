@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import TerminalTicker from '@/components/TerminalTicker';
 import TerminalBlock from '@/components/TerminalBlock';
 import SignalCard from '@/components/SignalCard';
@@ -9,7 +10,7 @@ import Link from 'next/link';
 import type { Signal } from '@/lib/types';
 
 export default function Home() {
-  const lang = getLang();
+  const lang = useLang();
   const [signals, setSignals] = useState<Signal[]>([]);
   const [loading, setLoading] = useState(true);
 

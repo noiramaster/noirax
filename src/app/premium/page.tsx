@@ -1,13 +1,14 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import SignalCard from '@/components/SignalCard';
 import type { Signal, UserProfile } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 
 export default function PremiumPage() {
-  const lang = getLang();
+  const lang = useLang();
   const [signals, setSignals] = useState<Signal[]>([]);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);

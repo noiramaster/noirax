@@ -1,11 +1,12 @@
-'use client';
+﻿'use client';
 
-// "Trade with one click" — available on any signal for users with an active
+// "Trade with one click" â€” available on any signal for users with an active
 // connection (real or paper). The modal ALWAYS shows the exact plan (entry,
 // SL, TP, quantity) before anything is placed; direct execution without that
 // confirmation step is impossible (the API also re-validates everything).
 import { useEffect, useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import type { Signal } from '@/lib/types';
 
@@ -24,7 +25,7 @@ interface Preview {
 }
 
 export default function OneClickTrade({ signal }: { signal: Signal }) {
-  const lang = getLang();
+  const lang = useLang();
   const [hasConnection, setHasConnection] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -107,7 +108,7 @@ export default function OneClickTrade({ signal }: { signal: Signal }) {
   if (hasConnection === null) return null;
   if (!hasConnection) return null;
 
-  const fmt = (n: number, d = 4) => (n === null || n === undefined ? '—' : Number(n).toFixed(d));
+  const fmt = (n: number, d = 4) => (n === null || n === undefined ? 'â€”' : Number(n).toFixed(d));
   const btn = 'border border-accent-green text-accent-green px-3 py-1.5 rounded text-xs font-mono hover:bg-accent-green hover:text-black transition-colors cursor-pointer disabled:opacity-50';
 
   return (
@@ -138,7 +139,7 @@ export default function OneClickTrade({ signal }: { signal: Signal }) {
               <div className="space-y-3">
                 {preview.connection.isPaper && (
                   <p className="text-[11px] text-yellow-400 font-mono border border-yellow-400/50 rounded p-2">
-                    ⚠ {t('trading.paper.badge', lang)}
+                    âš  {t('trading.paper.badge', lang)}
                   </p>
                 )}
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
@@ -160,7 +161,7 @@ export default function OneClickTrade({ signal }: { signal: Signal }) {
                   </div>
                   <div className="border border-border rounded p-2">
                     <p className="text-muted">{t('trading.oneClick.notional', lang)}</p>
-                    <p className="text-foreground">≈ {preview.plan.notionalUsd.toLocaleString()} USDT</p>
+                    <p className="text-foreground">â‰ˆ {preview.plan.notionalUsd.toLocaleString()} USDT</p>
                   </div>
                   <div className="border border-border rounded p-2">
                     <p className="text-muted">{t('trading.oneClick.risk', lang)}</p>

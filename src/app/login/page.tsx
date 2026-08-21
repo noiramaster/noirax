@@ -1,13 +1,14 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
-  const lang = getLang();
+  const lang = useLang();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import SignalCard from '@/components/SignalCard';
 import type { Signal } from '@/lib/types';
 
@@ -22,7 +23,7 @@ const durationDescriptions: Record<string, string> = {
 };
 
 export default function FreePage() {
-  const lang = getLang();
+  const lang = useLang();
   const [signals, setSignals] = useState<Signal[]>([]);
   const [loading, setLoading] = useState(true);
   const [duration, setDuration] = useState('all');

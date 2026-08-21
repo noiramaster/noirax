@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import ConnectWizard, { type TradingConfig } from '@/components/trading/ConnectWizard';
@@ -12,7 +13,7 @@ import type { ExchangeConnection } from '@/lib/trading';
 import type { User } from '@supabase/supabase-js';
 
 export default function TradingPage() {
-  const lang = getLang();
+  const lang = useLang();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,7 +148,7 @@ export default function TradingPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <a href={info.apiKeyUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-muted font-mono underline hover:text-foreground">
-              {t('trading.haveAccountShort', lang)} — {t('trading.generateApiKey', lang)}
+              {t('trading.haveAccountShort', lang)} â€” {t('trading.generateApiKey', lang)}
             </a>
           </div>
         </div>
@@ -221,7 +222,7 @@ export default function TradingPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
                     <div className="border border-border rounded p-3">
                       <p className="text-muted">{t('trading.dashboard.keyHint', lang)}</p>
-                      <p className="text-foreground">…{conn.key_hint}</p>
+                      <p className="text-foreground">â€¦{conn.key_hint}</p>
                     </div>
                     <div className="border border-border rounded p-3">
                       <p className="text-muted">{t('trading.dashboard.mode', lang)}</p>
@@ -261,7 +262,7 @@ export default function TradingPage() {
                       </button>
                     ) : (
                       <button onClick={() => setStatus(conn, 'paused')} disabled={busyId === conn.id} className="border border-accent-red text-accent-red px-4 py-2 rounded text-sm font-mono hover:bg-accent-red hover:text-black transition-colors cursor-pointer disabled:opacity-50">
-                        ⚠ {t('trading.dashboard.emergency', lang)}
+                        âš  {t('trading.dashboard.emergency', lang)}
                       </button>
                     )}
                     <button onClick={() => disconnect(conn)} disabled={busyId === conn.id} className="border border-border text-muted px-4 py-2 rounded text-sm font-mono hover:border-accent-red hover:text-accent-red transition-colors cursor-pointer disabled:opacity-50">

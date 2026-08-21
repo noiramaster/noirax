@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import type { Signal } from '@/lib/types';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import { cleanExplanation } from '@/lib/signalText';
 import Link from 'next/link';
 import OneClickTrade from '@/components/trading/OneClickTrade';
@@ -25,7 +26,7 @@ const riskLabels: Record<string, string> = {
 };
 
 export default function SignalCard({ signal, isPremium = false }: SignalCardProps) {
-  const lang = getLang();
+  const lang = useLang();
   const isBuy = signal.signal_type === 'buy';
   const accentColor = isBuy ? 'text-accent-green' : 'text-accent-red';
   const explanation = cleanExplanation(
@@ -41,11 +42,11 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
         <Link href={`/senales/${slug}`} className="font-bold text-foreground hover:text-accent-green transition-colors">
           {signal.coin}
         </Link>
-        <span className="text-muted">·</span>
+        <span className="text-muted">Â·</span>
         <span className={`font-bold ${accentColor}`}>
           {signal.signal_type === 'buy' ? t('signal.buySignal', lang) : t('signal.sellSignal', lang)}
         </span>
-        <span className="text-muted">·</span>
+        <span className="text-muted">Â·</span>
         <span className={accentColor} title={t('signal.confidenceTooltip', lang)}>{t('signal.confidenceLabel', lang)}: {signal.confidence}%</span>
         {signal.duration_type && (
           <span className={`text-xs border px-1.5 py-0.5 rounded ${
@@ -63,7 +64,7 @@ export default function SignalCard({ signal, isPremium = false }: SignalCardProp
         )}
         {signal.resolved_result === 'win' && (
           <span className="text-xs text-accent-green border border-accent-green px-1.5 py-0.5 rounded">
-            ✓ {t('signal.verified', lang)}
+            âœ“ {t('signal.verified', lang)}
           </span>
         )}
         {signal.risk_level && (

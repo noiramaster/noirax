@@ -1,11 +1,12 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import type { Signal } from '@/lib/types';
 
 export default function TrackRecordPage() {
-  const lang = getLang();
+  const lang = useLang();
   const [signals, setSignals] = useState<Signal[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -67,7 +68,7 @@ export default function TrackRecordPage() {
                   </span>
                 </div>
                 <div className="text-muted mt-1">
-                  {new Date(s.created_at).toLocaleDateString()} · {s.timeframe}
+                  {new Date(s.created_at).toLocaleDateString()} Â· {s.timeframe}
                 </div>
               </div>
             ))}

@@ -1,17 +1,18 @@
-'use client';
+﻿'use client';
 
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 export default function PricingPage() {
-  const lang = getLang();
+  const lang = useLang();
   const [loading, setLoading] = useState<string | null>(null);
   const [commissionRate, setCommissionRate] = useState<number>(0.25);
 
   useEffect(() => {
-    // Commission is configurable (env/app_settings) — read the real value.
+    // Commission is configurable (env/app_settings) â€” read the real value.
     fetch('/api/trading/config')
       .then((r) => r.json())
       .then((cfg) => {
@@ -71,7 +72,7 @@ export default function PricingPage() {
           </a>
         </div>
 
-        {/* Premium Monthly — €7.99 */}
+        {/* Premium Monthly â€” â‚¬7.99 */}
         <div className="border border-accent-green rounded p-6 flex flex-col relative">
           <div className="absolute -top-3 left-4 bg-black px-2 text-xs font-mono text-accent-green border border-accent-green rounded">
             RECOMMENDED
@@ -94,7 +95,7 @@ export default function PricingPage() {
           </button>
         </div>
 
-        {/* Premium Annual — €79 */}
+        {/* Premium Annual â€” â‚¬79 */}
         <div className="border border-border rounded p-6 flex flex-col">
           <h2 className="font-mono text-lg text-foreground mb-1">{t('pricing.annual.name', lang)}</h2>
           <p className="font-mono text-3xl text-accent-green mb-4">{t('pricing.annual.price', lang)}</p>
@@ -119,7 +120,7 @@ export default function PricingPage() {
         {t('legal.disclaimer', lang)}
       </p>
 
-      {/* Auto Trading — separate product, clearly distinct from the plans */}
+      {/* Auto Trading â€” separate product, clearly distinct from the plans */}
       <div className="mt-12 border border-border rounded p-6">
         <h2 className="font-mono text-xl text-accent-green mb-2">&gt; {t('trading.title', lang)}</h2>
         <p className="text-sm text-muted font-mono mb-4">

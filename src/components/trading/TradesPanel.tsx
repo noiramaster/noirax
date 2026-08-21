@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 
 interface TradeLike {
@@ -47,7 +48,7 @@ interface TradesData {
 }
 
 export default function TradesPanel() {
-  const lang = getLang();
+  const lang = useLang();
   const [data, setData] = useState<TradesData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -88,8 +89,8 @@ export default function TradesPanel() {
     return <p className="text-xs text-muted font-mono">{t('common.loading', lang)}</p>;
   }
 
-  const fmt = (n: number | null | undefined, d = 2) => (n === null || n === undefined ? '—' : n.toFixed(d));
-  const fmtMoney = (n: number | null | undefined) => (n === null || n === undefined ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)} USDT`);
+  const fmt = (n: number | null | undefined, d = 2) => (n === null || n === undefined ? 'â€”' : n.toFixed(d));
+  const fmtMoney = (n: number | null | undefined) => (n === null || n === undefined ? 'â€”' : `${n >= 0 ? '+' : ''}${n.toFixed(2)} USDT`);
   const statusLabel = (s: string): string => {
     const map: Record<string, string> = {
       pending: t('trading.dashboard.pending', lang),
@@ -134,7 +135,7 @@ export default function TradesPanel() {
       {/* Paper mode banner + trial summary */}
       {data.paper?.active && (
         <div className="border border-yellow-400/60 rounded p-4 space-y-2">
-          <p className="text-xs font-mono text-yellow-400">⚠ {t('trading.paper.badge', lang)}</p>
+          <p className="text-xs font-mono text-yellow-400">âš  {t('trading.paper.badge', lang)}</p>
           <p className="text-xs text-terminal-text font-mono">{t('trading.paper.balance', lang)}</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono">
             <div className="border border-border rounded p-2">
@@ -180,9 +181,9 @@ export default function TradesPanel() {
               return (
                 <div key={p.id} className="border border-border rounded p-3 flex flex-wrap items-center gap-3">
                   <div className="flex-1 min-w-52">
-                    <p className="text-sm font-mono text-foreground">{p.symbol} · {p.side.toUpperCase()}</p>
+                    <p className="text-sm font-mono text-foreground">{p.symbol} Â· {p.side.toUpperCase()}</p>
                     <p className="text-[11px] text-muted font-mono">
-                      {t('signal.entryZone', lang)}: {fmt(p.entry_price)} · {t('trading.dashboard.sl', lang)}: {fmt(p.entry_sl_price)} · {t('trading.dashboard.tp', lang)}: {(p.entry_tp_prices || []).join('/')} · qty {fmt(p.quantity, 6)}
+                      {t('signal.entryZone', lang)}: {fmt(p.entry_price)} Â· {t('trading.dashboard.sl', lang)}: {fmt(p.entry_sl_price)} Â· {t('trading.dashboard.tp', lang)}: {(p.entry_tp_prices || []).join('/')} Â· qty {fmt(p.quantity, 6)}
                     </p>
                   </div>
                   <span className="text-[11px] text-muted font-mono">{t('trading.dashboard.expiresIn', lang)} {mins} min</span>
@@ -211,7 +212,7 @@ export default function TradesPanel() {
             {data.open.map((o) => (
               <div key={o.id} className="border border-border rounded p-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono">
                 <div>
-                  <p className="text-muted">{o.symbol} · {o.side.toUpperCase()}</p>
+                  <p className="text-muted">{o.symbol} Â· {o.side.toUpperCase()}</p>
                   <p className="text-foreground">{t('signal.entryZone', lang)} {fmt(o.entry_price)}</p>
                 </div>
                 <div>
@@ -257,7 +258,7 @@ export default function TradesPanel() {
                     <td className="py-1.5 pr-3 text-muted">{statusLabel(c.status)}</td>
                     <td className="py-1.5 pr-3 text-foreground">{c.symbol}</td>
                     <td className="py-1.5 pr-3 text-foreground">{fmt(c.entry_price)}</td>
-                    <td className="py-1.5 pr-3 text-foreground">{fmt(c.exit_price)} <span className="text-muted">({c.closed_reason ?? '—'})</span></td>
+                    <td className="py-1.5 pr-3 text-foreground">{fmt(c.exit_price)} <span className="text-muted">({c.closed_reason ?? 'â€”'})</span></td>
                     <td className={`py-1.5 pr-3 ${pnlColor(c.pnl_net)}`}>{fmtMoney(c.pnl_net)}</td>
                     <td className="py-1.5 pr-3 text-muted">{fmtMoney(c.commission_amount)}</td>
                     <td className="py-1.5 pr-3 text-muted">{(c.closed_at || '').slice(0, 16).replace('T', ' ')}</td>
@@ -276,7 +277,7 @@ export default function TradesPanel() {
           <div className="border border-border rounded p-3">
             <p className="text-xs text-muted font-mono">{t('trading.dashboard.winRateLabel', lang)}</p>
             <p className="text-2xl font-mono text-accent-green">{data.stats.winRate}%</p>
-            <p className="text-[11px] text-muted font-mono">{data.stats.wins}W / {data.stats.losses}L · {data.stats.total} {t('trackRecord.totalSignals', lang)}</p>
+            <p className="text-[11px] text-muted font-mono">{data.stats.wins}W / {data.stats.losses}L Â· {data.stats.total} {t('trackRecord.totalSignals', lang)}</p>
           </div>
           <div className="border border-border rounded p-3">
             <p className="text-xs text-muted font-mono">{t('trading.dashboard.netPnlLabel', lang)}</p>

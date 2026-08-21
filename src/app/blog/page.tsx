@@ -1,13 +1,14 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
-import { getLang, t } from '@/lib/i18n';
+import { useLang } from '@/lib/useLang';
+import { t } from '@/lib/i18n';
 import Link from 'next/link';
 import { blogPosts as staticPosts } from '@/data/blog-posts';
 import { supabase } from '@/lib/supabase';
 
 export default function BlogListPage() {
-  const lang = getLang();
+  const lang = useLang();
   const [supabasePosts, setSupabasePosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,9 +44,9 @@ export default function BlogListPage() {
               <p className="text-xs text-muted mt-1">{(excerpt || '').slice(0, 120)}...</p>
               <div className="flex gap-2 mt-2 text-xs text-muted">
                 <span>{category}</span>
-                <span>·</span>
+                <span>Â·</span>
                 <span>{new Date(date).toLocaleDateString()}</span>
-                <span>·</span>
+                <span>Â·</span>
                 <Link href={`/blog/${slug}`} className="text-accent-green hover:underline">
                   {t('blog.readMore', lang)}
                 </Link>
