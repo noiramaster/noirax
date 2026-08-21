@@ -41,6 +41,7 @@ export default function TradingViewChart({ symbol, interval = '60', locale = 'en
     // JSON config from the textContent of its own <script> element, then
     // injects the chart iframe. We must append it to the DOM so it executes.
     const widgetContainer = document.createElement('div');
+    widgetContainer.className = 'h-full w-full';
     container.appendChild(widgetContainer);
 
     const script = document.createElement('script');
