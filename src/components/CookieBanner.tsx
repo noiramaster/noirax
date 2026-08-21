@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { getLang, t } from '@/lib/i18n';
 
 export default function CookieBanner() {
-  const lang = getLang();
+  const [lang, setLang] = useState('en');
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    setLang(getLang());
     const consent = localStorage.getItem('noirax_cookies');
     if (!consent) setVisible(true);
   }, []);

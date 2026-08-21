@@ -3,7 +3,7 @@ import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
 import { LOCALES } from "@/lib/i18n";
 
-const baseUrl = "https://noirax-plum.vercel.app";
+const baseUrl = "https://noiraxplum.vercel.app";
 
 export const metadata: Metadata = {
   title: {

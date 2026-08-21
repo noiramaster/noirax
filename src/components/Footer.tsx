@@ -3,9 +3,15 @@
 import DisclaimerBanner from './DisclaimerBanner';
 import { getLang, t } from '@/lib/i18n';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 export default function Footer() {
-  const lang = getLang();
+  const [lang, setLang] = useState('en');
+
+  useEffect(() => {
+    setLang(getLang());
+  }, []);
+
   return (
     <footer className="border-t border-border mt-auto">
       <div className="max-w-6xl mx-auto px-4 py-8">

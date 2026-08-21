@@ -8,9 +8,10 @@ const STORAGE_KEY = 'noirax_premium_prompt_seen';
 
 export default function PremiumPrompt() {
   const [visible, setVisible] = useState(false);
-  const lang = getLang();
+  const [lang, setLang] = useState('en');
 
   useEffect(() => {
+    setLang(getLang());
     const timer = setTimeout(() => {
       const lastSeen = localStorage.getItem(STORAGE_KEY);
       if (lastSeen) {

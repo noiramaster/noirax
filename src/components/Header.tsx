@@ -8,11 +8,12 @@ import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 
 export default function Header() {
-  const lang = getLang();
+  const [lang, setLang] = useState('en');
   const [user, setUser] = useState<User | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
+    setLang(getLang());
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user || null);
     });
