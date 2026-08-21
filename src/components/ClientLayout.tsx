@@ -22,12 +22,10 @@ const jetbrainsMono = JetBrains_Mono({
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const [lang, setLang] = useState('en');
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const detected = getLang();
     setLang(detected);
-    setMounted(true);
   }, []);
 
   const rtl = isRTL(lang);
@@ -35,10 +33,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   return (
     <div
       dir={rtl ? 'rtl' : 'ltr'}
+      suppressHydrationWarning
       className={`${inter.variable} ${jetbrainsMono.variable} flex flex-col min-h-full`}
     >
       <Header />
-      <main className="flex-1">{mounted ? children : null}</main>
+      <main className="flex-1">{children}</main>
       <Footer />
       <PremiumPrompt />
       <CookieBanner />
