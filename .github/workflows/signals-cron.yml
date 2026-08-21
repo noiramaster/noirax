@@ -40,7 +40,19 @@ jobs:
         id: pipeline
         run: |
           cd pipeline
-          python run_signals.py
+          for attempt in 1 2; do
+            echo "Pipeline attempt $attempt/2"
+            if python run_signals.py; then
+              echo "Pipeline OK"
+              break
+            else
+              echo "Pipeline attempt $attempt failed (exit $?)"
+              if [ $attempt -eq 2 ]; then
+                exit 1
+              fi
+              sleep 45
+            fi
+          done
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

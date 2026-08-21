@@ -43,6 +43,11 @@ TOP_COINS_FREE = int(os.environ.get("TECH_TOP_COINS_FREE", "0"))
 DEFAULT_TIMEFRAME = "1h"
 GEMINI_MODEL = "models/gemini-2.5-flash-lite"
 
+# Robustness: preflight + persistent run log + retries (see main()).
+REQUIRED_ENV = ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]
+OPTIONAL_ENV = ["GEMINI_API_KEY", "COINGECKO_API_KEY", "AI_PROVIDER"]
+MAX_INSERT_RETRIES = 3
+
 # Signal quality gates (Mejoras 4-7; env-configurable, sensible defaults)
 MIN_CONFIDENCE = int(os.environ.get("TECH_MIN_CONFIDENCE", "25"))
 MARKET_REGIME_DOWN_PCT = abs(float(os.environ.get("TECH_REGIME_DOWN_PCT", "2.0")))
@@ -792,9 +797,17 @@ def insert_signal(supabase_client, signal_data: dict) -> bool:
         if rows:
             logger.info(f"Dedup: active {signal_type} signal already exists for {coin} ({timeframe}) â€” skipping")
             return False
-        supabase_client.table("signals").insert(signal_data).execute()
-        logger.info(f"Signal inserted: {signal_data['coin']} {signal_data['signal_type']}")
-        return True
+        for attempt in range(1, MAX_INSERT_RETRIES + 1):
+            try:
+                supabase_client.table("signals").insert(signal_data).execute()
+                logger.info(f"Signal inserted: {signal_data['coin']} {signal_data['signal_type']}")
+                return True
+            except Exception as e:
+                if attempt == MAX_INSERT_RETRIES:
+                    raise
+                logger.warning(f"Signal insert attempt {attempt}/{MAX_INSERT_RETRIES} failed: {e} â€” retrying")
+                time.sleep(2 * attempt)
+        return False
     except Exception as e:
         logger.error(f"Failed to insert signal: {e}")
         return False
@@ -1332,11 +1345,66 @@ def write_status_json(proxy_count: int = 0, real_count: int = 0, last_error: str
         logger.warning(f"Could not write status file: {e}")
 
 
+def preflight_env() -> dict:
+    """Verify required env vars are present before doing any work.
+
+    Returns {var: "ok"|"missing"}. Missing REQUIRED vars abort the run with a
+    loud error instead of silently running with placeholder values (the failure
+    mode of 2026-08-10..13, when PIPELINE_PARAMS_JSON was undefined and the
+    pipeline failed quietly for days).
+    """
+    check = {}
+    missing = []
+    for var in REQUIRED_ENV:
+        ok = bool(os.environ.get(var, "").strip())
+        check[var] = "ok" if ok else "missing"
+        if not ok:
+            missing.append(var)
+    for var in OPTIONAL_ENV:
+        check[var] = "ok" if os.environ.get(var, "").strip() else "not-set"
+    if missing:
+        logger.error(f"PREFLIGHT FAILED: missing required env vars: {', '.join(missing)}")
+        logger.error("Configure them in repo Settings -> Secrets and variables -> Actions, then re-run.")
+    else:
+        logger.info(f"PREFLIGHT OK: {len(REQUIRED_ENV)} required vars present")
+    return check
+
+
+def record_pipeline_run(supabase_client, run_id: str, env_ok: dict, status: str,
+                        signals_created: int = 0, verified_count: int = 0,
+                        pending_before: int = 0, error_message: str = ""):
+    """Persist a run record to Supabase (pipeline_runs). The DB is the one
+    component of the stack that survives GitHub Actions downtime, so a stale
+    last row here is the first signal of trouble for /status and any watcher."""
+    if not supabase_client:
+        return
+    try:
+        supabase_client.table("pipeline_runs").insert({
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "status": status,
+            "signals_created": signals_created,
+            "verified_count": verified_count,
+            "pending_before": pending_before,
+            "error_message": error_message or None,
+            "env_ok": env_ok,
+            "run_id": run_id,
+        }).execute()
+    except Exception as e:
+        logger.warning(f"Could not record pipeline run in DB: {e}")
+
+
 def main():
     """Main pipeline execution."""
     logger.info("=" * 50)
     logger.info("NOIRAX Signal Pipeline v3 Starting")
     logger.info("=" * 50)
+
+    env_ok = preflight_env()
+    missing_required = [k for k, v in env_ok.items() if v == "missing"]
+    if missing_required:
+        sys.exit(f"Preflight failed: missing required env vars: {', '.join(missing_required)}")
+
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
 
     # Initialize Supabase
     supabase_client = None
@@ -1346,6 +1414,14 @@ def main():
         logger.info("Supabase client initialized")
     else:
         logger.warning("Supabase not configured - running in dry-run mode")
+
+    pending_before = 0
+    if supabase_client:
+        try:
+            pend = supabase_client.table("signals").select("id").eq("resolved_result", "pending").execute()
+            pending_before = len(pend.data) if hasattr(pend, "data") else 0
+        except Exception:
+            pending_before = -1
 
     # Get top coins â€” expanded universe for all duration categories
     coins = get_top_coins(limit=100 if COINGECKO_API_KEY else 50)
@@ -1535,6 +1611,7 @@ def main():
             logger.info("Gemini call failed, using fallback templates")
 
     # Build signal data
+    inserted_count = 0
     for item in all_analyses:
         analysis = item["analysis"]
         coin = item["coin"]
@@ -1611,12 +1688,16 @@ def main():
         }
 
         if supabase_client:
-            insert_signal(supabase_client, signal_data)
+            if insert_signal(supabase_client, signal_data):
+                inserted_count += 1
 
     # Verify past signals
+    verified = 0
     if supabase_client:
         verified = verify_past_signals(supabase_client)
         logger.info(f"Verified {verified} past signals")
+        if verified == 0 and pending_before > 0:
+            logger.warning(f"Verifier regression check: {pending_before} pending signals before the run, 0 verified. Possible verifier/CoinGecko issue.")
 
     # Track proxy vs real indicator usage
     proxy_count = sum(1 for a in all_analyses if "(proxy)" in str(a["analysis"].get("indicators_used", [])))
@@ -1630,9 +1711,33 @@ def main():
     # Write heartbeat
     write_status_json(proxy_count=proxy_count, real_count=real_count)
 
+    record_pipeline_run(
+        supabase_client, run_id, env_ok, "ok",
+        signals_created=inserted_count, verified_count=verified,
+        pending_before=pending_before,
+    )
+
     logger.info(f"Pipeline complete: {len(all_analyses)} signals")
     return len(all_analyses)
 
 
 if __name__ == "__main__":
-    main()
+    _run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    _env_ok = {}
+    try:
+        _env_ok = preflight_env()
+        main()
+    except SystemExit as e:
+        print(f"Pipeline exited with code {e.code}")
+        raise
+    except Exception as e:
+        print(f"PIPELINE ERROR: {e}")
+        try:
+            _supabase = None
+            if SUPABASE_URL and SUPABASE_KEY:
+                from supabase import create_client
+                _supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+            record_pipeline_run(_supabase, _run_id, _env_ok or {}, "error", error_message=str(e)[:2000])
+        except Exception:
+            pass
+        sys.exit(1)
