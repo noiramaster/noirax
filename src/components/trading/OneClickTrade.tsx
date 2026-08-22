@@ -106,10 +106,17 @@ export default function OneClickTrade({ signal }: { signal: Signal }) {
   };
 
   if (hasConnection === null) return null;
-  if (!hasConnection) return null;
 
-  const fmt = (n: number, d = 4) => (n === null || n === undefined ? 'â€”' : Number(n).toFixed(d));
+  const fmt = (n: number, d = 4) => (n === null || n === undefined ? '—' : Number(n).toFixed(d));
   const btn = 'border border-accent-green text-accent-green px-3 py-1.5 rounded text-xs font-mono hover:bg-accent-green hover:text-black transition-colors cursor-pointer disabled:opacity-50';
+
+  if (!hasConnection) {
+    return (
+      <a href="/trading" className="border border-border text-muted px-3 py-1.5 rounded text-xs font-mono hover:border-accent-green hover:text-accent-green transition-colors inline-block">
+        &gt; {t('trading.oneClick.connectPrompt', lang)}
+      </a>
+    );
+  }
 
   return (
     <>
